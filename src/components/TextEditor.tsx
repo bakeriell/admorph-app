@@ -358,26 +358,20 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
     }
   };
 
-  useEffect(() => {
-    const updateDims = () => {
-      if (imageRef.current && activeTool === 'TEXT_EDITOR') {
-        const { offsetWidth, offsetHeight } = imageRef.current;
-        console.log('TextEditor: Updating dims:', { offsetWidth, offsetHeight });
-        setContainerDims({
-          width: offsetWidth,
-          height: offsetHeight,
-        });
+  const refreshDimensions = React.useCallback(() => {
+    if (imageRef.current) {
+      const { offsetWidth, offsetHeight } = imageRef.current;
+      if (offsetWidth > 0 && offsetHeight > 0) {
+        setContainerDims({ width: offsetWidth, height: offsetHeight });
       }
-    };
+    }
+  }, []);
 
+  useEffect(() => {
     if (originalImage) {
-      console.log('TextEditor: originalImage changed, initializing...');
       setImage(originalImage);
       handleInitialProcessing(originalImage);
-      // Delay to allow image to render and become visible
-      setTimeout(updateDims, 300);
     } else {
-      console.log('TextEditor: originalImage is null, resetting state...');
       setImage(null);
       setTextBlocks([]);
       setEditedBlocks({});
@@ -385,16 +379,43 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
       setDisclaimerOverlay(null);
       setStatus(EditorState.IDLE);
     }
+  }, [originalImage]);
 
-    if (activeTool === 'TEXT_EDITOR') {
-        setTimeout(updateDims, 100);
-    }
-
+  useEffect(() => {
+    if (activeTool !== 'TEXT_EDITOR') return;
+    const updateDims = () => {
+      if (imageRef.current) {
+        const { offsetWidth, offsetHeight } = imageRef.current;
+        if (offsetWidth > 0 && offsetHeight > 0) {
+          setContainerDims({ width: offsetWidth, height: offsetHeight });
+        }
+      }
+    };
+    const t1 = setTimeout(updateDims, 50);
+    const t2 = setTimeout(updateDims, 250);
     window.addEventListener('resize', updateDims);
     return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
       window.removeEventListener('resize', updateDims);
     };
-  }, [originalImage, activeTool]);
+  }, [activeTool]);
+
+  useEffect(() => {
+    if (activeTool !== 'TEXT_EDITOR') return;
+    let disconnect: (() => void) | null = null;
+    const id = setTimeout(() => {
+      if (imageRef.current) {
+        const ro = new ResizeObserver(() => refreshDimensions());
+        ro.observe(imageRef.current);
+        disconnect = () => ro.disconnect();
+      }
+    }, 100);
+    return () => {
+      clearTimeout(id);
+      if (disconnect) disconnect();
+    };
+  }, [activeTool, refreshDimensions]);
 
 
   return (
