@@ -614,7 +614,9 @@ export const detectText = async (image: string): Promise<TextBlock[]> => {
             parts: [
  { text: `Analyze the image and detect the visible ad copy (headlines and subtitles as well as prices).
 
-CRITICAL: DUPLICATE PRICES: When the same number e.g. a price like "79€" or a number appears in MORE THAN ONE place (e.g. in a headline and again in body/fine print), return a SEPARATE element for EACH occurrence, each with its own bounding box [x_min, y_min, x_max, y_max]. Do not merge duplicate strings into one element and make sure that both are equal you cannot generate a result that contains the original 79€ for example in the headline and in the subtitle its 99€.
+CRITICAL - ONE BOX PER VISIBLE REGION: Each element must correspond to exactly ONE visible text region in the image. The "text" must be exactly what is visible in the image at that location—do not invent or duplicate. Do not return two elements with the same text and the same or overlapping bounding box. Each box [x_min, y_min, x_max, y_max] must tightly enclose a single contiguous text region that actually appears in the image.
+
+CRITICAL - DUPLICATE PRICES: When the same number (e.g. a price like "79€") appears in MORE THAN ONE place (e.g. in a headline and again in body/fine print), return a SEPARATE element for EACH occurrence, each with its own distinct bounding box. Do not merge them into one element. The text in each element must match what is actually visible at that location (e.g. you cannot output 79€ in one box and 99€ in another for the same image—both locations show the same value).
 
 For each element provide: exact text content and box as [x_min, y_min, x_max, y_max]. Return a JSON array of objects with "text" and "box" keys.` },
                 imagePart
@@ -643,7 +645,8 @@ For each element provide: exact text content and box as [x_min, y_min, x_max, y_
         let jsonText = response.text.trim();
         jsonText = jsonText.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
         try {
-            return JSON.parse(jsonText);
+            const raw = JSON.parse(jsonText) as TextBlock[];
+            return deduplicateTextBlocks(raw);
         } catch (parseError) {
             console.error('detectText: JSON parse error:', parseError);
             throw parseError;
@@ -651,6 +654,29 @@ For each element provide: exact text content and box as [x_min, y_min, x_max, y_
     }
     throw new Error("No text part found in response for text detection.");
 };
+
+/** Remove duplicate blocks (same text + overlapping or nearly identical box) so each box corresponds to one visible region. */
+function deduplicateTextBlocks(blocks: TextBlock[]): TextBlock[] {
+    const out: TextBlock[] = [];
+    for (const b of blocks) {
+        const same = out.find(
+            (o) =>
+                o.text.trim() === b.text.trim() &&
+                boxOverlap(o.box, b.box)
+        );
+        if (!same) out.push(b);
+    }
+    return out;
+}
+
+function boxOverlap(a: number[], b: number[]): boolean {
+    if (a.length < 4 || b.length < 4) return false;
+    const margin = 0.15;
+    const ax1 = a[0], ay1 = a[1], ax2 = a[2], ay2 = a[3];
+    const bw = (b[2] - b[0]) * margin, bh = (b[3] - b[1]) * margin;
+    const bx1 = b[0] - bw, by1 = b[1] - bh, bx2 = b[2] + bw, by2 = b[3] + bh;
+    return ax1 < bx2 && ax2 > bx1 && ay1 < by2 && ay2 > by1;
+}
 
 export const removeDisclaimer = async (image: string): Promise<{ image: string; disclaimer: string }> => {
     const ai = getAI();
@@ -780,6 +806,7 @@ Apply the following text replacements to the image.
 
 RULES:
 - For each replacement, find the original text in the image and replace it with the new text from the box. Match the original font, size, and style exactly. Make sure you change it for real just as the user wrote.
+- NUMBERS: For numbers, especially multi-digit numbers like "99", every digit must use the same font, size, and style exactly (e.g. both 9's must look identical—no mismatched digits).
 - If a number or price appears in multiple places (e.g. "79€" in a headline and again in body text), replace EVERY occurrence with newText. Do not skip any occurrence. Example 79€ in headline and body. user changes it to 99€. then both should be changed and updated in the new image to be 99€ for real. (or whatever number that the user enters)
 - Apply ALL replacements listed; and all changes made by the user to the text or numbers do not skip any and make sure that all have been applied before generating the final result
 - ALWAYS Remove any disclaimer or legal fine print from the image ALWAYS.
