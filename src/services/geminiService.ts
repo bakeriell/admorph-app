@@ -612,14 +612,7 @@ export const detectText = async (image: string): Promise<TextBlock[]> => {
         model,
         contents: {
             parts: [
-                { text: `Detect ONLY main ad copy. Do NOT include disclaimer, legal, terms, fine print, or small print at bottom/edges—user adds those later.
-
-Return JSON array: each item {"text": "exact string", "box": [x_min, y_min, x_max, y_max]}.
-Box format: x_min,y_min = top-left, x_max,y_max = bottom-right. x = horizontal (0=left, 1=right), y = vertical (0=top, 1=bottom). Normalize to 0-1. Each box must tightly wrap only that text—no extra empty space.
-
-Split text into many small items (one per line or short phrase). Long financial/promo lines MUST be split into separate boxes: e.g. "Anticipo 9.850€ - 35 canoni mensili di 79€ - Valore Riscatto 9.252€" must be TWO items: (1) "Anticipo 9.850€ - 35 canoni mensili di 79€" (2) "Valore Riscatto 9.252€". Split at logical breaks (before "Valore Riscatto", "TAN", "TAEG", or similar). Never one huge horizontal block for multiple amounts.
-
-One item per: headline line, subhead line, price, offer line 1, offer line 2, slogan, CTA, badge. Preserve exact text.` },
+                { text: 'Analyze the image and detect ALL visible text elements including headlines, subheadlines, prices, slogans, and body copy. For each element, provide its exact text content and its bounding box as [x_min, y_min, x_max, y_max]. Return as a JSON array of objects with "text" and "box" keys.' },
                 imagePart
             ]
         },
@@ -753,96 +746,6 @@ export const generateStoryAd = async (image: string, story: string): Promise<str
     }
 };
 
-/** Normalize for fuzzy match: trim, single spaces, lowercase, remove some punctuation. */
-function normalizeForMatch(s: string): string {
-    return (s ?? '')
-        .trim()
-        .toLowerCase()
-        .replace(/\s+/g, ' ')
-        .replace(/[,.]/g, '');
-}
-
-/** True if expected text is "found" in detected (detected block contains key parts of expected or equals). */
-function expectedTextFound(expected: string, detectedBlocks: TextBlock[]): boolean {
-    const key = normalizeForMatch(expected);
-    if (!key) return true;
-    const keyWords = key.split(/\s+/).filter(w => w.length > 1);
-    for (const block of detectedBlocks) {
-        const d = normalizeForMatch(block.text);
-        if (d === key || d.includes(key) || key.includes(d)) return true;
-        const matchCount = keyWords.filter(w => d.includes(w)).length;
-        if (keyWords.length > 0 && matchCount >= Math.min(2, keyWords.length)) return true;
-    }
-    return false;
-}
-
-/** Run text detection on generated image and check that requested new texts appear. Returns { ok, missingNewTexts }. */
-export async function verifyReplacements(imageBase64: string, expectedNewTexts: string[]): Promise<{ ok: boolean; missingNewTexts: string[] }> {
-    const blocks = await detectText(imageBase64);
-    const missing: string[] = [];
-    for (const expected of expectedNewTexts) {
-        if (!expectedTextFound(expected, blocks)) missing.push(expected);
-    }
-    const appliedRatio = (expectedNewTexts.length - missing.length) / Math.max(1, expectedNewTexts.length);
-    return { ok: appliedRatio >= 0.6, missingNewTexts: missing };
-}
-
-function buildReplaceTextPrompt(
-    changes: { oldText: string; newText: string }[],
-    retryMissing?: string[],
-    userPrompt?: string
-): string {
-    const escapeForPrompt = (s: string) =>
-        (s ?? '')
-            .replace(/\\/g, '\\\\')
-            .replace(/"/g, '\\"')
-            .replace(/\n/g, '\\n')
-            .replace(/\r/g, '');
-    const n = changes.length;
-
-    const retrySection = retryMissing && retryMissing.length > 0
-        ? `
-CRITICAL - THESE REPLACEMENTS WERE NOT APPLIED CORRECTLY. They MUST appear exactly in the image:
-${retryMissing.map((t, i) => `${i + 1}. "${escapeForPrompt(t)}"`).join('\n')}
-Apply every one above. Use the exact same font and style as the original. No deformed numbers.
-`
-        : '';
-
-    const userInstructions =
-        userPrompt && userPrompt.trim()
-            ? `
-USER INSTRUCTIONS (follow these when applying changes):
-"${escapeForPrompt(userPrompt.trim())}"
-`
-            : '';
-
-    return `
-OUTPUT RULES (non-negotiable):
-1. The output image must contain ZERO disclaimer, legal, terms, fine print, or footnote text. Erase all such text; fill with background. Completely disclaimer-free.
-2. Apply every replacement below. Replace the ENTIRE old text with the ENTIRE new text—do not truncate or omit any part, even if the text is long or has multiple lines. Each changed part must appear in the output exactly as given. Do not skip any.
-3. Every text and number must use the EXACT SAME font family, weight, size, and style as the original in that location. No substitution. Numbers and digits must not be deformed, stretched, or use a different typeface—match the original typography precisely.
-4. Before returning the image: cross-check that each "NEW" text from the list is present and correct in the image; fix any that are missing or wrong.
-${retrySection}
-${userInstructions}
-
-REPLACEMENTS (apply each one in order; total = ${n}):
-
-${changes.map((c, i) => {
-        const oldStr = escapeForPrompt(c.oldText ?? '');
-        const newStr = escapeForPrompt(c.newText ?? '');
-        return `[${i + 1}] Locate: "${oldStr}"
-    Replace with: "${newStr}"
-    Use same font, size, color, position. Verify numbers/digits are crisp and match original style. (Use \\n for line breaks if needed. For long text, render the full string.)`;
-    }).join('\n\n')}
-
-CHECKLIST BEFORE RETURNING:
-- Every replacement 1 to ${n} has been applied in full and is visible in the image.
-- No disclaimer or legal text remains anywhere.
-- All text and numbers match the original typography; no deformation.
-- Subject, logos, and license plates are unchanged.
-`;
-}
-
 export const replaceText = async (
     image: string,
     changes: { oldText: string; newText: string }[],
@@ -856,33 +759,42 @@ export const replaceText = async (
         },
     };
 
-    const doGenerate = async (retryMissing?: string[]): Promise<string> => {
-        const prompt = buildReplaceTextPrompt(changes, retryMissing, userPrompt);
-        const response = await ai.models.generateContent({
-            model: IMAGE_MODEL_NAME,
-            contents: {
-                parts: [{ text: prompt }, imagePart]
-            }
-        });
-        const content = response.candidates?.[0]?.content;
-        if (content?.parts) {
-            for (const part of content.parts) {
-                if (part.inlineData?.data) {
-                    return `data:image/png;base64,${part.inlineData.data}`;
-                }
-            }
-        }
-        const fallbackMessage = content?.parts?.find((p: any) => p.text)?.text;
-        throw new Error(fallbackMessage || "Failed to generate image or no image data in response");
-    };
+    const escapeForPrompt = (s: string) =>
+        (s ?? '')
+            .replace(/\\/g, '\\\\')
+            .replace(/"/g, '\\"')
+            .replace(/\n/g, '\\n')
+            .replace(/\r/g, '');
+    const n = changes.length;
+    const userInstructions =
+        userPrompt && userPrompt.trim()
+            ? `\nAdditional instructions to follow: "${escapeForPrompt(userPrompt.trim())}"\n`
+            : '';
 
-    let resultImage = await doGenerate();
-    const expectedNewTexts = changes.map(c => c.newText ?? '');
-    if (expectedNewTexts.length > 0) {
-        const { ok, missingNewTexts } = await verifyReplacements(resultImage, expectedNewTexts);
-        if (!ok && missingNewTexts.length > 0) {
-            resultImage = await doGenerate(missingNewTexts);
+    const prompt = `
+Apply the following text replacements to the image. For each item, find the old text and replace it with the new text. Match the original font, size, and style. Remove any disclaimer or legal fine print from the image (user will add it back manually).
+${userInstructions}
+REPLACEMENTS:
+${changes.map((c, i) => `${i + 1}. "${escapeForPrompt(c.oldText ?? '')}" → "${escapeForPrompt(c.newText ?? '')}"`).join('\n')}
+
+Preserve the rest of the image (subject, logos, license plates) unchanged.
+`;
+
+    const response = await ai.models.generateContent({
+        model: IMAGE_MODEL_NAME,
+        contents: {
+            parts: [{ text: prompt }, imagePart]
+        }
+    });
+
+    const content = response.candidates?.[0]?.content;
+    if (content?.parts) {
+        for (const part of content.parts) {
+            if (part.inlineData?.data) {
+                return `data:image/png;base64,${part.inlineData.data}`;
+            }
         }
     }
-    return resultImage;
+    const fallbackMessage = content?.parts?.find((p: any) => p.text)?.text;
+    throw new Error(fallbackMessage || "Failed to generate image or no image data in response");
 };

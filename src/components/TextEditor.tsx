@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from './Button';
 import { EditorState, TextBlock } from '../types';
-import { detectText, removeDisclaimer, replaceText, extractLegalText, resizeImageForDetection } from '../services/geminiService';
+import { detectText, removeDisclaimer, replaceText, extractLegalText } from '../services/geminiService';
 import { DraggableText, TextAlign } from './DraggableText';
 import { ImageViewer } from './ImageViewer';
 
@@ -33,7 +33,6 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
   const [disclaimerText, setDisclaimerText] = useState<string>('');
   const [disclaimerOverlay, setDisclaimerOverlay] = useState<TextOverlayData | null>(null);
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
-  const [selectedBlockIndex, setSelectedBlockIndex] = useState<number | null>(null);
   const [retryPrompt, setRetryPrompt] = useState('');
   const [isViewerOpen, setIsViewerOpen] = useState(false);
   const [containerDims, setContainerDims] = useState({ width: 0, height: 0 });
@@ -146,17 +145,14 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
       setStatus(EditorState.READY);
       setLoadingMessage('');
 
-      // Re-detect in background to update block positions; keep user's edited text so Retry resends same changes
       detectText(newImage)
         .then(blocks => {
           setTextBlocks(blocks);
-          setEditedBlocks(prev => {
-            const next: Record<number, string> = {};
-            blocks.forEach((block, index) => {
-              next[index] = prev[index] ?? block.text;
-            });
-            return next;
+          const initialEdits: Record<number, string> = {};
+          blocks.forEach((block, index) => {
+            initialEdits[index] = block.text;
           });
+          setEditedBlocks(initialEdits);
         })
         .catch(() => {});
 
@@ -328,41 +324,30 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
 
   const handleInitialProcessing = async (img: string) => {
     setStatus(EditorState.LOADING);
-    setLoadingMessage('Preparing image...');
+    setLoadingMessage('Analyzing image...');
     try {
-      const { dataUrl: resizedUrl, mimeType } = await resizeImageForDetection(img);
+      const mimeType = img.match(/data:([^;]+);/)?.[1] || 'image/png';
       setLoadingMessage('Detecting text...');
-      // Run text detection first so user sees content quickly; disclaimer extraction in background
-      const blocks = await detectText(resizedUrl);
+      const [extractedDisclaimer, blocks] = await Promise.all([
+        extractLegalText(img, mimeType),
+        detectText(img),
+      ]);
+      setDisclaimerText(extractedDisclaimer || '');
+
+      const filteredBlocks = blocks.filter((block) => {
+        if (!extractedDisclaimer) return true;
+        const cleanExtracted = extractedDisclaimer.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const cleanBlock = block.text.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (cleanBlock.length < 3) return true;
+        return !cleanExtracted.includes(cleanBlock) && !cleanBlock.includes(cleanExtracted);
+      });
+
+      setTextBlocks(filteredBlocks);
       const initialEdits: Record<number, string> = {};
-      blocks.forEach((block, index) => {
+      filteredBlocks.forEach((block, index) => {
         initialEdits[index] = block.text;
       });
-      setTextBlocks(blocks);
       setEditedBlocks(initialEdits);
-      setStatus(EditorState.READY);
-      setLoadingMessage('');
-
-      extractLegalText(resizedUrl, mimeType).then((extractedDisclaimer) => {
-        setDisclaimerText(extractedDisclaimer || '');
-        if (!extractedDisclaimer) return;
-        const cleanExtracted = extractedDisclaimer.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const isDisclaimer = (block: { text: string }) => {
-          const cleanBlock = block.text.toLowerCase().replace(/[^a-z0-9]/g, '');
-          if (cleanBlock.length < 3) return false;
-          return cleanExtracted.includes(cleanBlock) || cleanBlock.includes(cleanExtracted);
-        };
-        const indicesToKeep = blocks.map((_, i) => i).filter((i) => !isDisclaimer(blocks[i]));
-        const filteredBlocks = indicesToKeep.map((i) => blocks[i]);
-        setTextBlocks(filteredBlocks);
-        setEditedBlocks((prev) => {
-          const next: Record<number, string> = {};
-          indicesToKeep.forEach((oldIdx, newIdx) => {
-            next[newIdx] = prev[oldIdx] ?? blocks[oldIdx].text;
-          });
-          return next;
-        });
-      }).catch(() => {});
     } catch (e: any) {
       if (e.message === 'INVALID_API_KEY' || e.message === 'MODEL_NOT_FOUND') {
         throw e;
@@ -393,7 +378,6 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
       setEditedBlocks({});
       setDisclaimerText('');
       setDisclaimerOverlay(null);
-      setSelectedBlockIndex(null);
       setStatus(EditorState.IDLE);
     }
   }, [originalImage]);
@@ -499,15 +483,9 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
                   textBlocks.map((block, index) => (
                     <div key={index} className="group relative">
                       <textarea
-                        id={`text-block-${index}`}
                         value={editedBlocks[index] || ''}
                         onChange={(e) => handleTextBlockChange(index, e.target.value)}
-                        onFocus={() => setSelectedBlockIndex(index)}
-                        className={`w-full bg-slate-900/50 border rounded-lg p-2.5 text-xs text-slate-300 outline-none transition-all group-hover:border-slate-700 ${
-                          selectedBlockIndex === index
-                            ? 'border-indigo-500 ring-2 ring-indigo-500/30 focus:ring-2 focus:ring-indigo-500'
-                            : 'border-slate-800 focus:ring-1 focus:ring-indigo-500'
-                        }`}
+                        className="w-full bg-slate-900/50 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-300 focus:ring-1 focus:ring-indigo-500 outline-none transition-all group-hover:border-slate-700"
                         rows={2}
                       />
                       <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -632,65 +610,14 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
           )}
           {image ? (
             <div className="relative flex flex-col items-center gap-3">
-                <div className="relative inline-block">
+                <div className="relative">
                   <img 
                     ref={imageRef} 
                     src={image} 
                     alt="Edited creative" 
-                    className="block max-h-[80vh] max-w-full object-contain cursor-pointer hover:opacity-95 transition-opacity" 
+                    className="max-h-[80vh] max-w-full object-contain cursor-pointer hover:opacity-95 transition-opacity" 
+                    onClick={() => setIsViewerOpen(true)}
                   />
-                  {/* Clickable layer: click on image opens viewer and clears block selection */}
-                  <div
-                    className="absolute inset-0 cursor-pointer"
-                    onClick={() => {
-                      setSelectedBlockIndex(null);
-                      setIsViewerOpen(true);
-                    }}
-                    aria-hidden
-                  />
-                  {/* Magic select: overlay boxes for each detected text block; normalize box so [y,x] or wrong aspect is corrected */}
-                  {textBlocks.length > 0 && (
-                    <div className="absolute inset-0 pointer-events-none">
-                      <div className="absolute inset-0 pointer-events-auto">
-                        {textBlocks.map((block, i) => {
-                          const b = block.box;
-                          const scale = b.some((n) => n > 1) ? 1000 : 1;
-                          const isSelected = selectedBlockIndex === i;
-                          const w0 = (b[2] - b[0]) / scale;
-                          const h0 = (b[3] - b[1]) / scale;
-                          const looksHorizontal = block.text.trim().includes(' ');
-                          const likelySwapped = w0 < h0 && looksHorizontal;
-                          const left = (likelySwapped ? b[1] : b[0]) / scale;
-                          const top = (likelySwapped ? b[0] : b[1]) / scale;
-                          const width = likelySwapped ? (b[3] - b[1]) / scale : w0;
-                          const height = likelySwapped ? (b[2] - b[0]) / scale : h0;
-                          return (
-                            <div
-                              key={i}
-                              className={`absolute cursor-pointer border-2 transition-all pointer-events-auto ${
-                                isSelected
-                                  ? 'border-indigo-400 bg-indigo-400/25 ring-2 ring-indigo-400/50'
-                                  : 'border-indigo-400/60 bg-indigo-400/10 hover:bg-indigo-400/20 hover:border-indigo-400/80'
-                              }`}
-                              style={{
-                                left: `${left * 100}%`,
-                                top: `${top * 100}%`,
-                                width: `${width * 100}%`,
-                                height: `${height * 100}%`,
-                              }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedBlockIndex(i);
-                                setSelectedTextId(null);
-                                document.getElementById(`text-block-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                              }}
-                              title={`Block ${i + 1}: ${block.text.slice(0, 40)}${block.text.length > 40 ? '…' : ''}`}
-                            />
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
                   <ImageViewer 
                     isOpen={isViewerOpen} 
                     onClose={() => setIsViewerOpen(false)} 
@@ -712,6 +639,19 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
                 </div>
                 {textBlocks.length > 0 && (
                   <>
+                    <div className="w-full max-w-lg space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">
+                        Extra instructions for Retry / Apply
+                      </label>
+                      <textarea
+                        value={retryPrompt}
+                        onChange={(e) => setRetryPrompt(e.target.value)}
+                        placeholder="e.g. Make the headline bolder, fix the price..."
+                        className="w-full bg-slate-900/80 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-300 placeholder-slate-500 focus:ring-1 focus:ring-indigo-500 outline-none resize-y min-h-[60px]"
+                        rows={2}
+                      />
+                      <p className="text-[9px] text-slate-500">Used when you click Retry or Apply Changes.</p>
+                    </div>
                     <Button
                       onClick={handleReplaceText}
                       disabled={status === EditorState.LOADING}
@@ -721,19 +661,6 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
                     >
                       {status === EditorState.LOADING ? 'Generating...' : 'Retry'}
                     </Button>
-                    <div className="w-full max-w-lg space-y-1">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">
-                        Extra instructions for Retry / Apply
-                      </label>
-                      <textarea
-                        value={retryPrompt}
-                        onChange={(e) => setRetryPrompt(e.target.value)}
-                        placeholder="e.g. Make the headline bolder, fix the price, use the full text without cutting off..."
-                        className="w-full bg-slate-900/80 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-300 placeholder-slate-500 focus:ring-1 focus:ring-indigo-500 outline-none resize-y min-h-[60px]"
-                        rows={2}
-                      />
-                      <p className="text-[9px] text-slate-500">Used when you click Retry or Apply Changes.</p>
-                    </div>
                   </>
                 )}
             </div>
