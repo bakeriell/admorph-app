@@ -731,7 +731,7 @@ export const replaceText = async (image: string, changes: { oldText: string; new
         .replace(/\r/g, '');
     const n = changes.length;
     const prompt = `
-TASK: Apply ALL ${n} text replacements in ONE pass. This includes every title, headline, subheadline, price, and slogan listed below. Do not skip any. The image you receive is the current source.
+TASK: Apply ONLY the ${n} text replacements listed below. Do not add any new text, captions, watermarks, or content. Every generated image must be disclaimer-free.
 
 REPLACEMENTS (apply every one; total = ${n}):
 ${changes.map((c, i) => {
@@ -740,19 +740,18 @@ ${changes.map((c, i) => {
   return `${i + 1}. OLD: "${oldStr}" → NEW: "${newStr}" (use \\n for line breaks)`;
 }).join('\n')}
 
-CRITICAL - APPLY EVERY REPLACEMENT:
-- Process replacement 1, then 2, then 3, ... through ${n}. Every headline, subhead, title, and price in the list must be updated in the output.
-- Find each OLD text in the image (if not character-exact, match the closest visible text) and replace it completely with the exact NEW text.
-- Leave NO residue: remove the entire old text and render only the new text. No leftover characters, partial words, or ghost text. Each replaced area must show only the NEW text, cleanly.
+DO NOT ADD ANYTHING:
+- Only change text that appears in the list above. Do not add any text, slogans, disclaimers, or other content that is not in the NEW strings above.
+- The output must contain only: (1) the replaced text from the list, (2) the existing image content (vehicle, product, logos, plates). Nothing else.
 
-TEXT QUALITY (match the original):
-- Match the original font family, weight, and style for each replaced block (e.g. bold headline stays bold, light subhead stays light).
-- Match font size, color, and position so the new text looks native to the ad—same sharpness and anti-aliasing as the rest of the image.
-- Keep line breaks and layout where NEW contains \\n; keep single-line blocks on one line.
+APPLY EVERY REPLACEMENT:
+- Process replacement 1, then 2, ... through ${n}. Find each OLD text (or closest match) and replace it with the exact NEW text. No residue or ghost text.
 
-AFTER ALL REPLACEMENTS:
-- You may erase small legal/disclaimer text at the bottom or edges.
-- Preserve the subject (vehicle, product), logos, and license plates unchanged. Do not add or change anything else.
+TEXT QUALITY: Match original font, size, color, and position for each replacement so it looks native to the ad.
+
+DISCLAIMER-FREE OUTPUT (mandatory every time):
+- You MUST remove all disclaimer, legal, fine-print, terms, and footnote text from the image. Erase it and fill with background so the generated image never contains any legal/disclaimer text. This applies to every generation.
+- Preserve the subject (vehicle, product), logos, and license plates unchanged.
 `;
 
     const response = await ai.models.generateContent({
