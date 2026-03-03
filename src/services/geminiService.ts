@@ -38,7 +38,8 @@ const getAI = () => {
                  getSafeKey(process.env.API_KEY) || 
                  getSafeKey(process.env.GEMINI_API_KEY) ||
                  getSafeKey((process.env as any).Gemini_API_KEY) ||
-                 getSafeKey(process.env.GOOGLE_API_KEY);
+                 getSafeKey(process.env.GOOGLE_API_KEY) ||
+                 getSafeKey((import.meta as any).env?.VITE_GEMINI_API_KEY);
 
   if (!apiKey) {
     throw new Error("Gemini API key is not set. Please select an API key or set GEMINI_API_KEY in project settings.");
