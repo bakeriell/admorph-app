@@ -26,10 +26,14 @@ export default defineConfig(({ mode }) => {
       resolve: {
         alias: {
           '@': path.resolve(__dirname, '.'),
-          // Use web build only: avoids Node-only code that can set window.fetch (read-only in some environments)
+          // Force web build only: avoids Node code that sets window.fetch (read-only in some browsers)
           '@google/genai': path.resolve(__dirname, 'node_modules/@google/genai/dist/web/index.mjs'),
         },
         conditions: ['browser', 'import', 'module', 'default'],
-      }
+        mainFields: ['browser', 'module', 'main'],
+      },
+      optimizeDeps: {
+        include: ['@google/genai'],
+      },
     };
 });
