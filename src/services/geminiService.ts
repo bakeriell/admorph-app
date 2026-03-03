@@ -579,7 +579,7 @@ export const detectText = async (image: string): Promise<TextBlock[]> => {
         model,
         contents: {
             parts: [
-                { text: 'Analyze the image and detect ALL visible text elements including headlines, subheadlines, prices, slogans, and body copy. For each element, provide its exact text content and its bounding box as [x_min, y_min, x_max, y_max]. Return as a JSON array of objects with "text" and "box" keys.' },
+                { text: 'Analyze the image and detect ALL visible text elements. Return each element separately: main headline, subheadline, price, slogan, CTA, and any other copy as SEPARATE items. Do not merge different lines or blocks into one. For each element provide its exact text content and bounding box as [x_min, y_min, x_max, y_max]. Return a JSON array of objects with "text" and "box" keys.' },
                 imagePart
             ]
         },
@@ -737,18 +737,27 @@ export const replaceText = async (image: string, changes: { oldText: string; new
         .replace(/\r/g, '');
     const n = changes.length;
     const prompt = `
-TASK: Apply every text replacement listed below. The image you receive is the CURRENT source. You must apply ALL ${n} replacements; do not skip, merge, or ignore any. The output image must show exactly the "NEW" text where each "OLD" text was—every change the user made must appear exactly as specified.
+TASK: Apply ALL ${n} text replacements in ONE pass. This includes every title, headline, subheadline, price, and slogan listed below. Do not skip any. The image you receive is the current source.
 
-REPLACEMENTS (apply every one; count = ${n}):
+REPLACEMENTS (apply every one; total = ${n}):
 ${changes.map((c, i) => {
   const oldStr = escapeForPrompt(c.oldText ?? '');
   const newStr = escapeForPrompt(c.newText ?? '');
   return `${i + 1}. OLD: "${oldStr}" → NEW: "${newStr}" (use \\n for line breaks)`;
 }).join('\n')}
 
-RULES:
-- Find each OLD text in the image (if not exact, use the closest matching visible text) and replace it with the exact NEW text. Preserve font style, size, color, and position.
-- After all replacements: you may erase small legal/disclaimer text at the bottom or edges.
+CRITICAL - APPLY EVERY REPLACEMENT:
+- Process replacement 1, then 2, then 3, ... through ${n}. Every headline, subhead, title, and price in the list must be updated in the output.
+- Find each OLD text in the image (if not character-exact, match the closest visible text) and replace it completely with the exact NEW text.
+- Leave NO residue: remove the entire old text and render only the new text. No leftover characters, partial words, or ghost text. Each replaced area must show only the NEW text, cleanly.
+
+TEXT QUALITY (match the original):
+- Match the original font family, weight, and style for each replaced block (e.g. bold headline stays bold, light subhead stays light).
+- Match font size, color, and position so the new text looks native to the ad—same sharpness and anti-aliasing as the rest of the image.
+- Keep line breaks and layout where NEW contains \\n; keep single-line blocks on one line.
+
+AFTER ALL REPLACEMENTS:
+- You may erase small legal/disclaimer text at the bottom or edges.
 - Preserve the subject (vehicle, product), logos, and license plates unchanged. Do not add or change anything else.
 `;
 
