@@ -37,10 +37,18 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
   const [isViewerOpen, setIsViewerOpen] = useState(false);
   const [containerDims, setContainerDims] = useState({ width: 0, height: 0 });
   const [reDetectFailed, setReDetectFailed] = useState(false);
+  const [selectedBlockIndex, setSelectedBlockIndex] = useState<number | null>(null);
 
   const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const lastAppliedChangesRef = useRef<{ oldText: string; newText: string }[]>([]);
+
+  /** Normalize box to 0–1 if API returned 0–1000 or similar. */
+  const normalizeBox = (box: [number, number, number, number]): [number, number, number, number] => {
+    const max = Math.max(...box);
+    if (max > 1.5) return [box[0] / 1000, box[1] / 1000, box[2] / 1000, box[3] / 1000];
+    return box;
+  };
 
   const handleDetectText = async () => {
     const targetImage = image || originalImage;
@@ -453,20 +461,13 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
             <button onClick={onReset} className="text-sm text-slate-400 hover:text-white transition-colors">&larr; Start Over</button>
           </div>
           <p className="text-[11px] text-slate-400 mb-6 leading-relaxed bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
-            <span className="text-indigo-400 font-bold uppercase text-[9px] block mb-1">Instructions:</span>
-            Upload image, change the text, apply changes with the modified text, then click on the add disclaimer button as a last step.
+            <span className="text-indigo-400 font-bold uppercase text-[9px] block mb-1">Canva-style:</span>
+            Click any text on the image to edit it like a notepad, then Apply to regenerate the image. Add disclaimer last.
           </p>
 
-          <div className="mb-6 p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-lg">
-              <p className="text-sm text-indigo-200 leading-relaxed">
-                  <span className="font-bold">💡 Come funziona:</span> Modifica il testo desiderato e applica i cambiamenti. Il testo legale (disclaimer) verrà rimosso in automatico per evitare errori dato il font piccolo; clicca su <span className="font-bold">"Add disclaimer text"</span> per riaggiungerlo e posizionarlo manualmente come ultimo passaggio.
-              </p>
-          </div>
-
           <div className="space-y-6">
-            {/* Group 1: AI Magic Tools */}
             <div className="space-y-2">
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">AI Magic Tools</label>
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Tools</label>
               <div className="grid grid-cols-2 gap-2">
                 <Button 
                   onClick={handleDetectTextClick} 
@@ -489,54 +490,19 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
               </div>
             </div>
 
-            {/* Group 3: Content Editing */}
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Detected Content</label>
-                <span className="text-[10px] text-slate-600">{textBlocks.length} blocks found</span>
-              </div>
-              {reDetectFailed && (
-                <p className="text-amber-400 text-[10px] mb-1">Text blocks could not refresh. Click &quot;Detect Text&quot; to update.</p>
-              )}
-              
-              <div className="max-h-[240px] overflow-y-auto pr-2 space-y-2 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
-                {status === EditorState.LOADING && textBlocks.length === 0 ? (
-                  <div className="space-y-2 animate-pulse">
-                    {[1, 2, 3].map(i => (
-                      <div key={i} className="h-12 bg-slate-800/50 rounded-lg border border-slate-700/30" />
-                    ))}
-                  </div>
-                ) : textBlocks.length > 0 ? (
-                  textBlocks.map((block, index) => (
-                    <div key={index} className="group relative">
-                      <textarea
-                        value={editedBlocks[index] || ''}
-                        onChange={(e) => handleTextBlockChange(index, e.target.value)}
-                        className="w-full bg-slate-900/50 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-300 focus:ring-1 focus:ring-indigo-500 outline-none transition-all group-hover:border-slate-700"
-                        rows={2}
-                      />
-                      <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <span className="text-[8px] bg-slate-800 text-slate-500 px-1 rounded border border-slate-700">#{index + 1}</span>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="py-8 text-center border-2 border-dashed border-slate-800 rounded-xl">
-                    <p className="text-xs text-slate-600 italic">No text detected yet.</p>
-                  </div>
-                )}
-              </div>
-              
-              <div className="space-y-1">
-                <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest block ml-1">Step 1</span>
-                <Button 
-                  onClick={() => handleReplaceText(false)} 
-                  disabled={status === EditorState.LOADING || textBlocks.length === 0} 
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-sm py-3"
-                >
-                  {status === EditorState.LOADING ? 'Generating...' : 'Apply Changes'}
-                </Button>
-              </div>
+            {reDetectFailed && (
+              <p className="text-amber-400 text-[10px]">Text blocks could not refresh. Click &quot;Detect Text&quot; to update.</p>
+            )}
+
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Apply edits</label>
+              <Button 
+                onClick={() => handleReplaceText(false)} 
+                disabled={status === EditorState.LOADING || textBlocks.length === 0} 
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-sm py-3"
+              >
+                {status === EditorState.LOADING ? 'Generating...' : 'Apply Changes'}
+              </Button>
             </div>
 
             {/* Group 2: Disclaimer Overlay (Moved to bottom) */}
@@ -623,76 +589,134 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
           </div>
         </div>
 
-        {/* Right Panel: Image Preview */}
+        {/* Right Panel: Image with Canva-style click-to-edit text */}
         <div 
           ref={containerRef} 
-          className="lg:col-span-2 relative min-h-[400px] bg-slate-900 rounded-2xl border border-slate-800 flex items-center justify-center overflow-hidden"
-          onClick={() => setSelectedTextId(null)}
+          className="lg:col-span-2 relative min-h-[400px] bg-slate-900 rounded-2xl border border-slate-800 flex flex-col items-center justify-center overflow-hidden"
         >
           {status === EditorState.LOADING && (
             <div className="absolute inset-0 bg-slate-900/80 flex flex-col items-center justify-center z-20">
-                <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-indigo-500 mb-4"></div>
-                <p className="text-indigo-400 text-sm font-medium animate-pulse">{loadingMessage}</p>
+              <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-indigo-500 mb-4"></div>
+              <p className="text-indigo-400 text-sm font-medium animate-pulse">{loadingMessage}</p>
             </div>
           )}
           {image ? (
-            <div className="relative flex flex-col items-center gap-3">
-                <div className="relative">
-                  <img 
-                    ref={imageRef} 
-                    src={image} 
-                    alt="Edited creative" 
-                    className="max-h-[80vh] max-w-full object-contain cursor-pointer hover:opacity-95 transition-opacity" 
-                    onClick={() => setIsViewerOpen(true)}
-                  />
-                  <ImageViewer 
-                    isOpen={isViewerOpen} 
-                    onClose={() => setIsViewerOpen(false)} 
-                    imageSrc={image} 
-                    altText="Generated Text Edit" 
-                    overlay={disclaimerOverlay}
-                    editorDims={containerDims}
-                  />
-                  {disclaimerOverlay && (
-                    <DraggableText
-                      {...disclaimerOverlay}
-                      containerWidth={containerDims.width}
-                      containerHeight={containerDims.height}
-                      isSelected={selectedTextId === disclaimerOverlay.id}
-                      onSelect={() => setSelectedTextId(disclaimerOverlay.id)}
-                      onUpdate={(data) => setDisclaimerOverlay({ ...disclaimerOverlay, ...data })}
-                    />
-                  )}
+            <>
+              <div className="relative inline-block">
+                <img 
+                  ref={imageRef} 
+                  src={image} 
+                  alt="Edited creative" 
+                  className="max-h-[70vh] max-w-full object-contain block pointer-events-none select-none"
+                />
+                {/* Overlay: same size as image — click text to edit */}
+                <div 
+                  className="absolute inset-0"
+                  style={{ pointerEvents: textBlocks.length > 0 ? 'auto' : 'none' }}
+                  onClick={() => setSelectedBlockIndex(null)}
+                >
+                  <div className="relative w-full h-full">
+                    {textBlocks.map((block, index) => {
+                      const box = normalizeBox(block.box);
+                      const left = box[0] * 100;
+                      const top = box[1] * 100;
+                      const width = Math.max(2, (box[2] - box[0]) * 100);
+                      const height = Math.max(8, (box[3] - box[1]) * 100);
+                      const isSelected = selectedBlockIndex === index;
+                      const displayText = editedBlocks[index] ?? block.text;
+                      return (
+                        <div
+                          key={index}
+                          className="absolute cursor-text rounded min-w-[20px] min-h-[20px] flex items-center justify-center overflow-hidden"
+                          style={{
+                            left: `${left}%`,
+                            top: `${top}%`,
+                            width: `${width}%`,
+                            height: `${height}%`,
+                            border: isSelected ? '2px solid rgb(99 102 241)' : '1px solid transparent',
+                            backgroundColor: isSelected ? 'rgba(30, 58, 138, 0.25)' : 'transparent',
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedBlockIndex(index);
+                            setSelectedTextId(null);
+                          }}
+                        >
+                          {isSelected ? (
+                            <textarea
+                              className="w-full h-full min-h-[24px] resize-none bg-transparent text-white text-center text-[inherit] p-0.5 outline-none border-0 focus:ring-0 placeholder-slate-500"
+                              style={{ fontSize: 'clamp(10px, 2vw, 14px)' }}
+                              value={displayText}
+                              onChange={(e) => handleTextBlockChange(index, e.target.value)}
+                              onClick={(e) => e.stopPropagation()}
+                              placeholder="Edit text..."
+                              autoFocus
+                              rows={Math.max(1, Math.ceil((displayText || '').length / 20))}
+                            />
+                          ) : (
+                            <span 
+                              className="w-full h-full flex items-center justify-center overflow-hidden text-center text-white/90 hover:text-white hover:bg-white/5 truncate px-0.5"
+                              style={{ fontSize: 'clamp(10px, 2vw, 14px)', textShadow: '0 0 2px rgba(0,0,0,0.8)' }}
+                            >
+                              {displayText || ' '}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-                {textBlocks.length > 0 && (
-                  <>
-                    <div className="w-full max-w-lg space-y-1">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">
-                        Extra instructions for Retry / Apply
-                      </label>
-                      <textarea
-                        value={retryPrompt}
-                        onChange={(e) => setRetryPrompt(e.target.value)}
-                        placeholder="e.g. Make the headline bolder, fix the price..."
-                        className="w-full bg-slate-900/80 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-300 placeholder-slate-500 focus:ring-1 focus:ring-indigo-500 outline-none resize-y min-h-[60px]"
-                        rows={2}
-                      />
-                      <p className="text-[9px] text-slate-500">Used when you click Retry or Apply Changes.</p>
-                    </div>
-                    <Button
-                      onClick={() => handleReplaceText(true)}
-                      disabled={status === EditorState.LOADING}
-                      variant="outline"
-                      className="text-sm py-2 px-4 border-slate-600 text-slate-300 hover:bg-slate-700/50"
-                      icon={<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>}
-                    >
-                      {status === EditorState.LOADING ? 'Generating...' : 'Retry'}
-                    </Button>
-                  </>
+                {disclaimerOverlay && (
+                  <DraggableText
+                    {...disclaimerOverlay}
+                    containerWidth={containerDims.width}
+                    containerHeight={containerDims.height}
+                    isSelected={selectedTextId === disclaimerOverlay.id}
+                    onSelect={() => { setSelectedTextId(disclaimerOverlay.id); setSelectedBlockIndex(null); }}
+                    onUpdate={(data) => setDisclaimerOverlay({ ...disclaimerOverlay, ...data })}
+                  />
                 )}
-            </div>
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <Button
+                  variant="outline"
+                  className="text-xs py-1.5 px-3 border-slate-600 text-slate-400 hover:bg-slate-800"
+                  onClick={() => setIsViewerOpen(true)}
+                >
+                  Full screen
+                </Button>
+              </div>
+              <ImageViewer 
+                isOpen={isViewerOpen} 
+                onClose={() => setIsViewerOpen(false)} 
+                imageSrc={image} 
+                altText="Generated Text Edit" 
+                overlay={disclaimerOverlay}
+                editorDims={containerDims}
+              />
+              {textBlocks.length > 0 && (
+                <div className="w-full max-w-lg mt-3 space-y-2">
+                  <textarea
+                    value={retryPrompt}
+                    onChange={(e) => setRetryPrompt(e.target.value)}
+                    placeholder="Extra instructions for Apply / Retry (e.g. bolder, fix price...)"
+                    className="w-full bg-slate-900/80 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-300 placeholder-slate-500 focus:ring-1 focus:ring-indigo-500 outline-none resize-y min-h-[50px]"
+                    rows={2}
+                  />
+                  <Button
+                    onClick={() => handleReplaceText(true)}
+                    disabled={status === EditorState.LOADING}
+                    variant="outline"
+                    className="w-full text-sm py-2 border-slate-600 text-slate-300 hover:bg-slate-700/50"
+                    icon={<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>}
+                  >
+                    {status === EditorState.LOADING ? 'Generating...' : 'Retry'}
+                  </Button>
+                </div>
+              )}
+            </>
           ) : (
-            <div className="text-center text-slate-500">
+            <div className="text-center text-slate-500 py-12">
               <p>Upload an image to begin.</p>
             </div>
           )}
