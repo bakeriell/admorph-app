@@ -5,6 +5,7 @@ import { Editor } from './components/Editor';
 import { BackgroundEditor } from './components/BackgroundEditor';
 import { TextEditor } from './components/TextEditor';
 import { Button } from './components/Button';
+import { getGeminiApiKey } from './config';
 
 const App: React.FC = () => {
   const [status, setStatus] = useState<EditorState>(EditorState.IDLE);
@@ -15,34 +16,13 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const checkKey = async () => {
-      // If we already have a key in the environment, we're good
-      const getSafeKey = (key: any) => {
-        if (typeof key !== 'string') return null;
-        let trimmed = key.trim();
-        if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
-          trimmed = trimmed.substring(1, trimmed.length - 1).trim();
-        }
-        if (!trimmed || trimmed === 'undefined' || trimmed === 'null' || trimmed === '""' || trimmed === "''" || trimmed.length < 10) return null;
-        return trimmed;
-      };
-
-      const envKey = getSafeKey((window as any).process?.env?.API_KEY) || 
-                     getSafeKey((window as any).process?.env?.GEMINI_API_KEY) ||
-                     getSafeKey(process.env.API_KEY) ||
-                     getSafeKey(process.env.GEMINI_API_KEY) ||
-                     getSafeKey((process.env as any).Gemini_API_KEY) ||
-                     getSafeKey(process.env.GOOGLE_API_KEY) ||
-                     getSafeKey((import.meta as any).env?.VITE_GEMINI_API_KEY) ||
-                     getSafeKey((import.meta as any).env?.VITE_Gemini_API_KEY);
-
-      if (envKey) {
+      if (getGeminiApiKey()) {
         setHasApiKey(true);
         setIsCheckingKey(false);
         return;
       }
-
       try {
-        if (window.aistudio && window.aistudio.hasSelectedApiKey) {
+        if (typeof window !== 'undefined' && window.aistudio?.hasSelectedApiKey) {
           const hasKey = await window.aistudio.hasSelectedApiKey();
           setHasApiKey(hasKey);
         } else {

@@ -1,5 +1,6 @@
 import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import { TextBlock } from '../types';
+import { getGeminiApiKey } from '../config';
 
 const IMAGE_MODEL_NAME = 'gemini-2.5-flash-image';
 
@@ -11,38 +12,9 @@ export interface DetectedElement {
 }
 
 const getAI = () => {
-  const getSafeKey = (key: any) => {
-    if (typeof key !== 'string') return null;
-    let trimmed = key.trim();
-    // Strip surrounding quotes if present
-    if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
-      trimmed = trimmed.substring(1, trimmed.length - 1).trim();
-    }
-    // Check for common invalid placeholders or empty strings
-    if (!trimmed || 
-        trimmed === 'undefined' || 
-        trimmed === 'null' || 
-        trimmed === '""' || 
-        trimmed === "''" ||
-        trimmed.length < 10) { 
-      return null;
-    }
-    return trimmed;
-  };
-
-  // Prioritize keys in this order:
-  // 1. window.process.env.API_KEY (platform injection)
-  // 2. process.env.API_KEY (Vite define)
-  // 3. process.env.GEMINI_API_KEY / Gemini_API_KEY (Vite define, e.g. Vercel env)
-  const apiKey = getSafeKey((window as any).process?.env?.API_KEY) || 
-                 getSafeKey(process.env.API_KEY) || 
-                 getSafeKey(process.env.GEMINI_API_KEY) ||
-                 getSafeKey((process.env as any).Gemini_API_KEY) ||
-                 getSafeKey(process.env.GOOGLE_API_KEY) ||
-                 getSafeKey((import.meta as any).env?.VITE_GEMINI_API_KEY);
-
+  const apiKey = getGeminiApiKey();
   if (!apiKey) {
-    throw new Error("Gemini API key is not set. Please select an API key or set GEMINI_API_KEY in project settings.");
+    throw new Error("Gemini API key is not set. Please set VITE_GEMINI_API_KEY in your environment (e.g. Vercel project settings).");
   }
   return new GoogleGenAI({ apiKey });
 };
