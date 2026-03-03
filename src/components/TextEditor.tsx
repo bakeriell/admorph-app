@@ -326,21 +326,20 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
     setStatus(EditorState.LOADING);
     setLoadingMessage('Analyzing image...');
     try {
-      // Step 1: Extract disclaimer text FIRST (fast)
       const mimeType = img.match(/data:([^;]+);/)?.[1] || 'image/png';
-      const extractedDisclaimer = await extractLegalText(img, mimeType);
-      setDisclaimerText(extractedDisclaimer || "");
+      // Run disclaimer extraction and text detection in parallel to speed up (max of both instead of sum)
+      setLoadingMessage('Detecting text...');
+      const [extractedDisclaimer, blocks] = await Promise.all([
+        extractLegalText(img, mimeType),
+        detectText(img),
+      ]);
+      setDisclaimerText(extractedDisclaimer || '');
 
-      // Step 2: Detect other text (headlines, etc)
-      setLoadingMessage('Detecting headlines...');
-      const blocks = await detectText(img);
-      
-      // Filter out blocks that are likely part of the disclaimer
       const filteredBlocks = blocks.filter(block => {
         if (!extractedDisclaimer) return true;
         const cleanExtracted = extractedDisclaimer.toLowerCase().replace(/[^a-z0-9]/g, '');
         const cleanBlock = block.text.toLowerCase().replace(/[^a-z0-9]/g, '');
-        if (cleanBlock.length < 3) return true; // Keep very short things
+        if (cleanBlock.length < 3) return true;
         return !cleanExtracted.includes(cleanBlock) && !cleanBlock.includes(cleanExtracted);
       });
 
@@ -350,9 +349,6 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
         initialEdits[index] = block.text;
       });
       setEditedBlocks(initialEdits);
-
-      // Step 3: We no longer create the overlay immediately.
-      // It will be added after the user clicks Apply Changes.
     } catch (e: any) {
       if (e.message === 'INVALID_API_KEY' || e.message === 'MODEL_NOT_FOUND') {
         throw e;

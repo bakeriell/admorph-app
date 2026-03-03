@@ -574,7 +574,6 @@ export const detectText = async (image: string): Promise<TextBlock[]> => {
         },
     };
 
-    console.log('detectText: Sending request to Gemini...');
     const response = await ai.models.generateContent({
         model,
         contents: {
@@ -602,16 +601,11 @@ export const detectText = async (image: string): Promise<TextBlock[]> => {
         }
     });
 
-    console.log('detectText: Received response from Gemini');
     if (response.text) {
         let jsonText = response.text.trim();
-        console.log('detectText: Raw response text:', jsonText);
-        // Remove markdown code blocks if present
         jsonText = jsonText.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
         try {
-            const parsed = JSON.parse(jsonText);
-            console.log('detectText: Successfully parsed JSON');
-            return parsed;
+            return JSON.parse(jsonText);
         } catch (parseError) {
             console.error('detectText: JSON parse error:', parseError);
             throw parseError;
