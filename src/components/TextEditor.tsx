@@ -40,6 +40,7 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
 
   const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const lastAppliedChangesRef = useRef<{ oldText: string; newText: string }[]>([]);
 
   const handleDetectText = async () => {
     const targetImage = image || originalImage;
@@ -121,31 +122,39 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
     }
   };
 
-  const handleReplaceText = async () => {
+  const handleReplaceText = async (isRetry: boolean = false) => {
     if (!image) return;
     setStatus(EditorState.LOADING);
     setLoadingMessage('Generating high-quality image...');
 
-    // Build changes from current blocks (from last detection) and user edits. Every edited block is included so all changes are applied.
-    const changes = textBlocks
+    // Build changes from current blocks and user edits. Retry: if no pending edits, re-use last applied changes.
+    let changes = textBlocks
       .map((block, index) => ({
         oldText: block.text,
         newText: editedBlocks[index] ?? block.text,
       }))
       .filter(change => change.oldText !== change.newText);
 
+    if (changes.length === 0 && isRetry && lastAppliedChangesRef.current.length > 0) {
+      changes = lastAppliedChangesRef.current;
+    }
     if (changes.length === 0) {
       setStatus(EditorState.READY);
+      setLoadingMessage('');
       return;
     }
+
+    lastAppliedChangesRef.current = changes;
 
     try {
       // Always use current image as source (original or last generated). If a previous apply missed some changes, the next apply uses this updated image so edits accumulate correctly.
       const newImage = await replaceText(image, changes, retryPrompt.trim() || undefined);
       setImage(newImage);
       setReDetectFailed(false);
+      setStatus(EditorState.READY);
+      setLoadingMessage('');
 
-      // Re-detect text on the new image so Apply/Retry keeps working (with retries so 3rd+ apply doesn't break)
+      // Re-detect text in the background so Apply/Retry keeps working (with retries so 3rd+ apply doesn't break)
       const reDetectWithRetry = async (src: string, attempt = 0): Promise<void> => {
         const maxAttempts = 3;
         try {
@@ -162,9 +171,6 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
             return reDetectWithRetry(src, attempt + 1);
           }
           setReDetectFailed(true);
-        } finally {
-          setStatus(EditorState.READY);
-          setLoadingMessage('');
         }
       };
       reDetectWithRetry(newImage);
@@ -524,7 +530,7 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
               <div className="space-y-1">
                 <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest block ml-1">Step 1</span>
                 <Button 
-                  onClick={handleReplaceText} 
+                  onClick={() => handleReplaceText(false)} 
                   disabled={status === EditorState.LOADING || textBlocks.length === 0} 
                   className="w-full bg-indigo-600 hover:bg-indigo-700 text-sm py-3"
                 >
@@ -674,7 +680,7 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
                       <p className="text-[9px] text-slate-500">Used when you click Retry or Apply Changes.</p>
                     </div>
                     <Button
-                      onClick={handleReplaceText}
+                      onClick={() => handleReplaceText(true)}
                       disabled={status === EditorState.LOADING}
                       variant="outline"
                       className="text-sm py-2 px-4 border-slate-600 text-slate-300 hover:bg-slate-700/50"
