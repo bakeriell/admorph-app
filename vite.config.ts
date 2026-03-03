@@ -26,14 +26,19 @@ export default defineConfig(({ mode }) => {
       resolve: {
         alias: {
           '@': path.resolve(__dirname, '.'),
-          // Force web build only: avoids Node code that sets window.fetch (read-only in some browsers)
+          // Force GenAI web build only (avoids Node code that sets window.fetch)
           '@google/genai': path.resolve(__dirname, 'node_modules/@google/genai/dist/web/index.mjs'),
+          '@google/genai/web': path.resolve(__dirname, 'node_modules/@google/genai/dist/web/index.mjs'),
         },
         conditions: ['browser', 'import', 'module', 'default'],
         mainFields: ['browser', 'module', 'main'],
+        dedupe: ['@google/genai'],
       },
       optimizeDeps: {
         include: ['@google/genai'],
+        esbuildOptions: {
+          mainFields: ['browser', 'module', 'main'],
+        },
       },
     };
 });

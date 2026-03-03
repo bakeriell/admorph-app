@@ -612,7 +612,7 @@ export const detectText = async (image: string): Promise<TextBlock[]> => {
         model,
         contents: {
             parts: [
-                { text: 'List all visible text in this ad. JSON array: each item {"text": "exact string", "box": [x_min, y_min, x_max, y_max]}. Split long text into multiple items for accurate editing: use one item per line, or per short phrase (e.g. headline line 1, headline line 2, body line 1, body line 2). Do NOT merge long paragraphs into one block—split by line or by clear visual break so each box is a single line or short phrase. One item per headline line, subhead line, price, slogan, CTA, badge. Preserve exact text. Normalize box to 0-1 or 0-1000.' },
+                { text: 'Detect ONLY main ad copy. Do NOT include disclaimer, legal, terms, fine print, footnotes, or small print at bottom/edges—the user adds those manually later. Return a JSON array: each item {"text": "exact string", "box": [x_min, y_min, x_max, y_max]}. Split text into many small items: one item per line, or per short phrase (max 1–2 lines per item). Never return one large block—split by line breaks and by visual breaks so each box is a single line or short phrase. One item per: headline line 1, headline line 2, subhead line, price, offer, slogan, CTA, badge, etc. Preserve exact text. Normalize box to 0-1 or 0-1000.' },
                 imagePart
             ]
         },
