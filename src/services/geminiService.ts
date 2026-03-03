@@ -729,25 +729,28 @@ export const replaceText = async (image: string, changes: { oldText: string; new
         },
     };
 
+    const escapeForPrompt = (s: string) =>
+      (s ?? '')
+        .replace(/\\/g, '\\\\')
+        .replace(/"/g, '\\"')
+        .replace(/\n/g, '\\n')
+        .replace(/\r/g, '');
+    const n = changes.length;
     const prompt = `
-    Apply every text replacement below. You must perform ALL of them; do not skip or merge any. Each bullet is one required replacement.
+TASK: Apply every text replacement listed below. The image you receive is the CURRENT source. You must apply ALL ${n} replacements; do not skip, merge, or ignore any. The output image must show exactly the "NEW" text where each "OLD" text was—every change the user made must appear exactly as specified.
 
-    REPLACEMENTS (apply every one):
-    ${changes.map((c, i) => {
-      const oldStr = (c.oldText ?? '').replace(/\n/g, ' ').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      const newStr = (c.newText ?? '').replace(/\n/g, ' ').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      return `${i + 1}. Replace this exact text: "${oldStr}" → with: "${newStr}"`;
-    }).join('\n')}
+REPLACEMENTS (apply every one; count = ${n}):
+${changes.map((c, i) => {
+  const oldStr = escapeForPrompt(c.oldText ?? '');
+  const newStr = escapeForPrompt(c.newText ?? '');
+  return `${i + 1}. OLD: "${oldStr}" → NEW: "${newStr}" (use \\n for line breaks)`;
+}).join('\n')}
 
-    MANDATORY CLEANUP:
-    1. **Remove Legal/Fine Print**: Detect and ERASE any small legal text, disclaimers, or footnotes at the bottom or edges of the image.
-
-    CRITICAL QUALITY RULES:
-    1. **Preserve Subject**: The vehicle (car), its geometry, lighting, and reflections must remain 100% identical.
-    2. **Logos & Plates**: The car manufacturer logo (badge) and the license plate MUST be preserved PIXEL-PERFECT. Do not blur, warp, or change even a single character on the plate.
-    3. **Seamless Text**: Match the original font, style, color, and positioning. Long lines must stay on one line or wrap as in the original. The replacement must look native to the photo.
-    4. **No Hallucinations**: Do not add or change anything else in the image.
-    `;
+RULES:
+- Find each OLD text in the image (if not exact, use the closest matching visible text) and replace it with the exact NEW text. Preserve font style, size, color, and position.
+- After all replacements: you may erase small legal/disclaimer text at the bottom or edges.
+- Preserve the subject (vehicle, product), logos, and license plates unchanged. Do not add or change anything else.
+`;
 
     const response = await ai.models.generateContent({
         model: IMAGE_MODEL_NAME,

@@ -124,6 +124,7 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
     setStatus(EditorState.LOADING);
     setLoadingMessage('Generating high-quality image...');
 
+    // Build changes from current blocks (from last detection) and user edits. Every edited block is included so all changes are applied.
     const changes = textBlocks
       .map((block, index) => ({
         oldText: block.text,
@@ -137,6 +138,7 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
     }
 
     try {
+      // Always use current image as source (original or last generated). If a previous apply missed some changes, the next apply uses this updated image so edits accumulate correctly.
       const newImage = await replaceText(image, changes);
       setImage(newImage);
       setStatus(EditorState.READY);
