@@ -744,14 +744,16 @@ export const replaceText = async (image: string, changes: { oldText: string; new
         contents: {
             parts: [{ text: prompt }, imagePart]
         }
-        // imageSize is only for Pro models
     });
 
-    const result = response;
-    if (result.candidates && result.candidates[0].content.parts[0].inlineData) {
-        const base64Data = result.candidates[0].content.parts[0].inlineData.data;
-        return `data:image/png;base64,${base64Data}`;
-    } else {
-        throw new Error("Failed to generate image or no image data in response");
+    const content = response.candidates?.[0]?.content;
+    if (content?.parts) {
+        for (const part of content.parts) {
+            if (part.inlineData?.data) {
+                return `data:image/png;base64,${part.inlineData.data}`;
+            }
+        }
     }
+    const fallbackMessage = content?.parts?.find((p: any) => p.text)?.text;
+    throw new Error(fallbackMessage || "Failed to generate image or no image data in response");
 };
