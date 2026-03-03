@@ -731,7 +731,9 @@ export const replaceText = async (image: string, changes: { oldText: string; new
         .replace(/\r/g, '');
     const n = changes.length;
     const prompt = `
-TASK: Apply ONLY the ${n} text replacements listed below. Do not add any new text, captions, watermarks, or content. Every generated image must be disclaimer-free.
+MANDATORY FIRST: The output image MUST NOT contain ANY disclaimer, legal, terms, fine print, footnote, or small text at the bottom/edges. ERASE all of it and fill with background. No exceptions. Every generation must be completely disclaimer-free.
+
+TASK: Apply ONLY the ${n} text replacements listed below. Do not add any new text. Output = disclaimer-free image with only these replacements.
 
 REPLACEMENTS (apply every one; total = ${n}):
 ${changes.map((c, i) => {
@@ -740,21 +742,13 @@ ${changes.map((c, i) => {
   return `${i + 1}. OLD: "${oldStr}" → NEW: "${newStr}" (use \\n for line breaks)`;
 }).join('\n')}
 
-DO NOT ADD ANYTHING:
-- Only change text that appears in the list above. Do not add any text, slogans, disclaimers, or other content that is not in the NEW strings above.
-- The output must contain only: (1) the replaced text from the list, (2) the existing image content (vehicle, product, logos, plates). Nothing else.
+DO NOT ADD ANYTHING: Only change text from the list. No disclaimers, no legal text, no extra copy. Output = replaced text + vehicle/product/logos/plates only.
 
-APPLY EVERY REPLACEMENT:
-- Process replacement 1, then 2, ... through ${n}. Find each OLD text (or closest match) and replace it with the exact NEW text. No residue or ghost text. When there are many replacements, apply the same care to every one—do not degrade quality on any block.
+APPLY EVERY REPLACEMENT: Process 1 through ${n}. Find each OLD text (or closest match), replace with exact NEW text. No residue. Same quality for every block.
 
-TEXT QUALITY (critical—same for every replacement including those with numbers):
-- Use the EXACT SAME font family, weight, style, and size as the original text in that location. Do not substitute a different font or approximate; the replacement must be visually indistinguishable from the original typography.
-- Numbers and digits (prices, dates, figures, percentages): render them in the SAME font and style as the surrounding or original text. Do not deform, stretch, or use a different typeface for numerals. Keep digit proportions, spacing, and baseline identical to the original so numbers look native to the ad.
-- Preserve exact letter spacing, line height, and alignment. The result must look like the original ad with only the words/numbers changed—no visible change in font or style.
+TEXT QUALITY: Exact same font, weight, style, size as original. Numbers/digits in same font—no deformation. Same letter spacing, alignment.
 
-DISCLAIMER-FREE OUTPUT (mandatory every time):
-- You MUST remove all disclaimer, legal, fine-print, terms, and footnote text from the image. Erase it and fill with background so the generated image never contains any legal/disclaimer text. This applies to every generation.
-- Preserve the subject (vehicle, product), logos, and license plates unchanged.
+FINAL CHECK (non-negotiable): The image you return must have ZERO disclaimer or legal text anywhere. Remove every bit of small print at bottom or edges. Fill those areas with background. Preserve subject, logos, license plates only.
 `;
 
     const response = await ai.models.generateContent({
