@@ -612,9 +612,9 @@ export const detectText = async (image: string): Promise<TextBlock[]> => {
         model,
         contents: {
             parts: [
-                { text: `Analyze the image and detect ALL visible text elements including headlines, subheadlines, prices, slogans, and body copy.
+ { text: `Analyze the image and detect the visible ad copy (headlines and subtitles as well as prices).
 
-CRITICAL - DUPLICATE TEXT: When the same text (e.g. a price like "79€" or a number) appears in MORE THAN ONE place (e.g. in a headline and again in body/fine print), return a SEPARATE element for EACH occurrence, each with its own bounding box [x_min, y_min, x_max, y_max]. Do not merge duplicate strings into one element.
+CRITICAL: DUPLICATE PRICES: When the same number e.g. a price like "79€" or a number appears in MORE THAN ONE place (e.g. in a headline and again in body/fine print), return a SEPARATE element for EACH occurrence, each with its own bounding box [x_min, y_min, x_max, y_max]. Do not merge duplicate strings into one element and make sure that both are equal you cannot generate a result that contains the original 79€ for example in the headline and in the subtitle its 99€.
 
 For each element provide: exact text content and box as [x_min, y_min, x_max, y_max]. Return a JSON array of objects with "text" and "box" keys.` },
                 imagePart
@@ -779,10 +779,10 @@ export const replaceText = async (
 Apply the following text replacements to the image.
 
 RULES:
-- For each replacement, find the old text and replace it with the new text. Match the original font, size, and style exactly.
-- If the SAME oldText appears in multiple places (e.g. "79€" in a headline and again in body text), replace EVERY occurrence with newText. Do not skip any occurrence.
-- Apply ALL replacements listed; do not skip any.
-- Remove any disclaimer or legal fine print from the image (user will add it back manually).
+- For each replacement, find the original text in the image and replace it with the new text from the box. Match the original font, size, and style exactly. Make sure you change it for real just as the user wrote.
+- If a number or price appears in multiple places (e.g. "79€" in a headline and again in body text), replace EVERY occurrence with newText. Do not skip any occurrence. Example 79€ in headline and body. user changes it to 99€. then both should be changed and updated in the new image to be 99€ for real. (or whatever number that the user enters)
+- Apply ALL replacements listed; and all changes made by the user to the text or numbers do not skip any and make sure that all have been applied before generating the final result
+- ALWAYS Remove any disclaimer or legal fine print from the image ALWAYS.
 ${userInstructions}
 REPLACEMENTS:
 ${changes.map((c, i) => `${i + 1}. "${escapeForPrompt(c.oldText ?? '')}" → "${escapeForPrompt(c.newText ?? '')}"`).join('\n')}
