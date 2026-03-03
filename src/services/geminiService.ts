@@ -745,9 +745,12 @@ DO NOT ADD ANYTHING:
 - The output must contain only: (1) the replaced text from the list, (2) the existing image content (vehicle, product, logos, plates). Nothing else.
 
 APPLY EVERY REPLACEMENT:
-- Process replacement 1, then 2, ... through ${n}. Find each OLD text (or closest match) and replace it with the exact NEW text. No residue or ghost text.
+- Process replacement 1, then 2, ... through ${n}. Find each OLD text (or closest match) and replace it with the exact NEW text. No residue or ghost text. When there are many replacements, apply the same care to every one—do not degrade quality on any block.
 
-TEXT QUALITY: Match original font, size, color, and position for each replacement so it looks native to the ad. Numbers and digits (prices, dates, figures) must be rendered clearly and not deformed—keep numerals crisp, legible, and properly shaped.
+TEXT QUALITY (critical—same for every replacement including those with numbers):
+- Use the EXACT SAME font family, weight, style, and size as the original text in that location. Do not substitute a different font or approximate; the replacement must be visually indistinguishable from the original typography.
+- Numbers and digits (prices, dates, figures, percentages): render them in the SAME font and style as the surrounding or original text. Do not deform, stretch, or use a different typeface for numerals. Keep digit proportions, spacing, and baseline identical to the original so numbers look native to the ad.
+- Preserve exact letter spacing, line height, and alignment. The result must look like the original ad with only the words/numbers changed—no visible change in font or style.
 
 DISCLAIMER-FREE OUTPUT (mandatory every time):
 - You MUST remove all disclaimer, legal, fine-print, terms, and footnote text from the image. Erase it and fill with background so the generated image never contains any legal/disclaimer text. This applies to every generation.
