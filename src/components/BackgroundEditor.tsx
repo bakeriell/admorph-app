@@ -82,8 +82,8 @@ export const BackgroundEditor: React.FC<BackgroundEditorProps> = ({ originalImag
   const [activeTab, setActiveTab] = useState<Category>('Studio');
   const [selectedPreset, setSelectedPreset] = useState<string>('studio_dark');
   const [customPrompt, setCustomPrompt] = useState<string>('');
-  const [highFidelity, setHighFidelity] = useState<boolean>(true);
-  
+  // Car is always preserved (high-fidelity composite). No toggle.
+
   const [extractedLegalText, setExtractedLegalText] = useState<string>('');
   const [isExtractingText, setIsExtractingText] = useState(false);
   const [disclaimer, setDisclaimer] = useState<TextOverlayData | null>(null);
@@ -209,66 +209,58 @@ export const BackgroundEditor: React.FC<BackgroundEditorProps> = ({ originalImag
     setDisclaimer(null);
     try {
       const mimeType = originalImage.match(/data:([^;]+);/)?.[1] || 'image/png';
-      
-      // 1. Generate the new background image
-      const newImage = await replaceBackground(originalImage, mimeType, activePrompt);
-      
-      if (highFidelity) {
-        // HIGH FIDELITY: Keep car exactly the same (orientation, details). Only the background changes.
+
+      // Run background generation and vehicle detection in parallel (faster)
+      const [newImage, elements] = await Promise.all([
+        replaceBackground(originalImage, mimeType, activePrompt),
+        detectMovableElements(originalImage, mimeType),
+      ]);
+
+      const labelLower = (l: string) => l.toLowerCase();
+      const vehicle = elements.find(el => {
+        const l = labelLower(el.label);
+        return l.includes('product') || l.includes('vehicle') || l.includes('car') || l.includes('automobile');
+      });
+
+      if (vehicle) {
         try {
-          const elements = await detectMovableElements(originalImage, mimeType);
-          const labelLower = (l: string) => l.toLowerCase();
-          const vehicle = elements.find(el => {
-            const l = labelLower(el.label);
-            return l.includes('product') || l.includes('vehicle') || l.includes('car') || l.includes('automobile');
-          });
+          const [ymin, xmin, ymax, xmax] = vehicle.box_2d;
+          const originalImg = new Image();
+          await new Promise((resolve) => { originalImg.onload = resolve; originalImg.src = originalImage; });
 
-          if (vehicle) {
-            const [ymin, xmin, ymax, xmax] = vehicle.box_2d;
-            const originalImg = new Image();
-            await new Promise((resolve) => { originalImg.onload = resolve; originalImg.src = originalImage; });
+          const origW = originalImg.naturalWidth;
+          const origH = originalImg.naturalHeight;
+          const cropW = (xmax - xmin) * origW / 1000;
+          const cropH = (ymax - ymin) * origH / 1000;
+          const cropX = xmin * origW / 1000;
+          const cropY = ymin * origH / 1000;
 
-            const origW = originalImg.naturalWidth;
-            const origH = originalImg.naturalHeight;
-            const cropW = (xmax - xmin) * origW / 1000;
-            const cropH = (ymax - ymin) * origH / 1000;
-            const cropX = xmin * origW / 1000;
-            const cropY = ymin * origH / 1000;
+          const cropCanvas = document.createElement('canvas');
+          cropCanvas.width = cropW;
+          cropCanvas.height = cropH;
+          const cropCtx = cropCanvas.getContext('2d');
+          if (cropCtx) {
+            cropCtx.drawImage(originalImg, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+            const cropBase64 = cropCanvas.toDataURL(mimeType);
 
-            const cropCanvas = document.createElement('canvas');
-            cropCanvas.width = cropW;
-            cropCanvas.height = cropH;
-            const cropCtx = cropCanvas.getContext('2d');
-            if (cropCtx) {
-              cropCtx.drawImage(originalImg, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
-              const cropBase64 = cropCanvas.toDataURL(mimeType);
+            const segmented = await segmentElement(cropBase64, mimeType, vehicle.label);
+            const transparentCar = await removeMagentaBackground(segmented);
 
-              const segmented = await segmentElement(cropBase64, mimeType, vehicle.label);
-              const transparentCar = await removeMagentaBackground(segmented);
+            const bgImg = new Image();
+            const carImg = new Image();
+            await new Promise((resolve) => { bgImg.onload = resolve; bgImg.src = newImage; });
+            await new Promise((resolve) => { carImg.onload = resolve; carImg.src = transparentCar; });
 
-              const bgImg = new Image();
-              const carImg = new Image();
-              await new Promise((resolve) => { bgImg.onload = resolve; bgImg.src = newImage; });
-              await new Promise((resolve) => { carImg.onload = resolve; carImg.src = transparentCar; });
-
-              const finalCanvas = document.createElement('canvas');
-              finalCanvas.width = bgImg.naturalWidth;
-              finalCanvas.height = bgImg.naturalHeight;
-              const finalCtx = finalCanvas.getContext('2d');
-              if (finalCtx) {
-                finalCtx.drawImage(bgImg, 0, 0);
-                // Scale car position/size to new background dimensions so orientation and placement stay correct
-                const scaleX = finalCanvas.width / origW;
-                const scaleY = finalCanvas.height / origH;
-                const dx = cropX * scaleX;
-                const dy = cropY * scaleY;
-                const dw = cropW * scaleX;
-                const dh = cropH * scaleY;
-                finalCtx.drawImage(carImg, 0, 0, cropW, cropH, dx, dy, dw, dh);
-                setImage(finalCanvas.toDataURL(mimeType));
-              } else {
-                setImage(newImage);
-              }
+            const finalCanvas = document.createElement('canvas');
+            finalCanvas.width = bgImg.naturalWidth;
+            finalCanvas.height = bgImg.naturalHeight;
+            const finalCtx = finalCanvas.getContext('2d');
+            if (finalCtx) {
+              finalCtx.drawImage(bgImg, 0, 0);
+              const scaleX = finalCanvas.width / origW;
+              const scaleY = finalCanvas.height / origH;
+              finalCtx.drawImage(carImg, 0, 0, cropW, cropH, cropX * scaleX, cropY * scaleY, cropW * scaleX, cropH * scaleY);
+              setImage(finalCanvas.toDataURL(mimeType));
             } else {
               setImage(newImage);
             }
@@ -276,7 +268,7 @@ export const BackgroundEditor: React.FC<BackgroundEditorProps> = ({ originalImag
             setImage(newImage);
           }
         } catch (fidelityError) {
-          console.warn("High Fidelity composite failed, falling back to AI result:", fidelityError);
+          console.warn("Car composite failed, using AI result:", fidelityError);
           setImage(newImage);
         }
       } else {
@@ -449,21 +441,7 @@ export const BackgroundEditor: React.FC<BackgroundEditorProps> = ({ originalImag
 
             {/* Refine Prompt */}
             <div className="space-y-2 mb-6">
-              <div className="flex items-center justify-between">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Refine Prompt (Optional)</label>
-                <label className="flex items-center gap-2 cursor-pointer group">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest group-hover:text-indigo-400 transition-colors">High Fidelity Mode</span>
-                  <div className="relative inline-flex items-center cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      checked={highFidelity} 
-                      onChange={(e) => setHighFidelity(e.target.checked)}
-                      className="sr-only peer" 
-                    />
-                    <div className="w-7 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-indigo-600"></div>
-                  </div>
-                </label>
-              </div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Refine Prompt (Optional)</label>
               <textarea 
                 value={customPrompt}
                 onChange={(e) => setCustomPrompt(e.target.value)}

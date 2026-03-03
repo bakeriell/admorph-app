@@ -2,7 +2,8 @@ import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import { TextBlock } from '../types';
 import { getGeminiApiKey } from '../config';
 
-const IMAGE_MODEL_NAME = 'gemini-2.5-flash-image';
+/** Nano Banana Pro = Gemini 3 Pro Image. Use preview identifier if needed: gemini-3-pro-image-preview */
+const IMAGE_MODEL_NAME = 'gemini-3-pro-image';
 
 const TEXT_MODEL_NAME = 'gemini-3-flash-preview';
 
