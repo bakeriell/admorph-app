@@ -648,7 +648,7 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
                     }}
                     aria-hidden
                   />
-                  {/* Magic select: overlay boxes for each detected text block; click to select and jump to that text box */}
+                  {/* Magic select: overlay boxes for each detected text block; normalize box so [y,x] or wrong aspect is corrected */}
                   {textBlocks.length > 0 && (
                     <div className="absolute inset-0 pointer-events-none">
                       <div className="absolute inset-0 pointer-events-auto">
@@ -656,6 +656,14 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
                           const b = block.box;
                           const scale = b.some((n) => n > 1) ? 1000 : 1;
                           const isSelected = selectedBlockIndex === i;
+                          const w0 = (b[2] - b[0]) / scale;
+                          const h0 = (b[3] - b[1]) / scale;
+                          const looksHorizontal = block.text.trim().includes(' ');
+                          const likelySwapped = w0 < h0 && looksHorizontal;
+                          const left = (likelySwapped ? b[1] : b[0]) / scale;
+                          const top = (likelySwapped ? b[0] : b[1]) / scale;
+                          const width = likelySwapped ? (b[3] - b[1]) / scale : w0;
+                          const height = likelySwapped ? (b[2] - b[0]) / scale : h0;
                           return (
                             <div
                               key={i}
@@ -665,10 +673,10 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
                                   : 'border-indigo-400/60 bg-indigo-400/10 hover:bg-indigo-400/20 hover:border-indigo-400/80'
                               }`}
                               style={{
-                                left: `${(b[0] / scale) * 100}%`,
-                                top: `${(b[1] / scale) * 100}%`,
-                                width: `${((b[2] - b[0]) / scale) * 100}%`,
-                                height: `${((b[3] - b[1]) / scale) * 100}%`,
+                                left: `${left * 100}%`,
+                                top: `${top * 100}%`,
+                                width: `${width * 100}%`,
+                                height: `${height * 100}%`,
                               }}
                               onClick={(e) => {
                                 e.stopPropagation();

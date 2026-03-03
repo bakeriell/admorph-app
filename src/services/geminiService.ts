@@ -612,7 +612,14 @@ export const detectText = async (image: string): Promise<TextBlock[]> => {
         model,
         contents: {
             parts: [
-                { text: 'Detect ONLY main ad copy. Do NOT include disclaimer, legal, terms, fine print, footnotes, or small print at bottom/edges—the user adds those manually later. Return a JSON array: each item {"text": "exact string", "box": [x_min, y_min, x_max, y_max]}. Split text into many small items: one item per line, or per short phrase (max 1–2 lines per item). Never return one large block—split by line breaks and by visual breaks so each box is a single line or short phrase. One item per: headline line 1, headline line 2, subhead line, price, offer, slogan, CTA, badge, etc. Preserve exact text. Normalize box to 0-1 or 0-1000.' },
+                { text: `Detect ONLY main ad copy. Do NOT include disclaimer, legal, terms, fine print, or small print at bottom/edges—user adds those later.
+
+Return JSON array: each item {"text": "exact string", "box": [x_min, y_min, x_max, y_max]}.
+Box format: x_min,y_min = top-left, x_max,y_max = bottom-right. x = horizontal (0=left, 1=right), y = vertical (0=top, 1=bottom). Normalize to 0-1. Each box must tightly wrap only that text—no extra empty space.
+
+Split text into many small items (one per line or short phrase). Long financial/promo lines MUST be split into separate boxes: e.g. "Anticipo 9.850€ - 35 canoni mensili di 79€ - Valore Riscatto 9.252€" must be TWO items: (1) "Anticipo 9.850€ - 35 canoni mensili di 79€" (2) "Valore Riscatto 9.252€". Split at logical breaks (before "Valore Riscatto", "TAN", "TAEG", or similar). Never one huge horizontal block for multiple amounts.
+
+One item per: headline line, subhead line, price, offer line 1, offer line 2, slogan, CTA, badge. Preserve exact text.` },
                 imagePart
             ]
         },
