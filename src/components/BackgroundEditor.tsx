@@ -214,53 +214,57 @@ export const BackgroundEditor: React.FC<BackgroundEditorProps> = ({ originalImag
       const newImage = await replaceBackground(originalImage, mimeType, activePrompt);
       
       if (highFidelity) {
-        // HIGH FIDELITY MODE: Ensure the car is exactly the same by compositing the original car back
+        // HIGH FIDELITY: Keep car exactly the same (orientation, details). Only the background changes.
         try {
-          // A. Detect the vehicle in the original image
           const elements = await detectMovableElements(originalImage, mimeType);
-          const vehicle = elements.find(el => el.label.toLowerCase().includes('product') || el.label.toLowerCase().includes('vehicle') || el.label.toLowerCase().includes('car'));
-          
+          const labelLower = (l: string) => l.toLowerCase();
+          const vehicle = elements.find(el => {
+            const l = labelLower(el.label);
+            return l.includes('product') || l.includes('vehicle') || l.includes('car') || l.includes('automobile');
+          });
+
           if (vehicle) {
-            // B. Segment the vehicle from the original image
             const [ymin, xmin, ymax, xmax] = vehicle.box_2d;
-            
-            // Create a crop of the vehicle
-            const cropCanvas = document.createElement('canvas');
             const originalImg = new Image();
             await new Promise((resolve) => { originalImg.onload = resolve; originalImg.src = originalImage; });
-            
-            const cropW = (xmax - xmin) * originalImg.naturalWidth / 1000;
-            const cropH = (ymax - ymin) * originalImg.naturalHeight / 1000;
-            const cropX = xmin * originalImg.naturalWidth / 1000;
-            const cropY = ymin * originalImg.naturalHeight / 1000;
-            
+
+            const origW = originalImg.naturalWidth;
+            const origH = originalImg.naturalHeight;
+            const cropW = (xmax - xmin) * origW / 1000;
+            const cropH = (ymax - ymin) * origH / 1000;
+            const cropX = xmin * origW / 1000;
+            const cropY = ymin * origH / 1000;
+
+            const cropCanvas = document.createElement('canvas');
             cropCanvas.width = cropW;
             cropCanvas.height = cropH;
             const cropCtx = cropCanvas.getContext('2d');
             if (cropCtx) {
               cropCtx.drawImage(originalImg, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
               const cropBase64 = cropCanvas.toDataURL(mimeType);
-              
-              // C. Segment and remove background from crop
+
               const segmented = await segmentElement(cropBase64, mimeType, vehicle.label);
               const transparentCar = await removeMagentaBackground(segmented);
-              
-              // D. Composite the original car onto the new background
-              const finalCanvas = document.createElement('canvas');
+
               const bgImg = new Image();
               const carImg = new Image();
-              
               await new Promise((resolve) => { bgImg.onload = resolve; bgImg.src = newImage; });
               await new Promise((resolve) => { carImg.onload = resolve; carImg.src = transparentCar; });
-              
+
+              const finalCanvas = document.createElement('canvas');
               finalCanvas.width = bgImg.naturalWidth;
               finalCanvas.height = bgImg.naturalHeight;
-              const finalCtx = finalCanvas.width > 0 ? finalCanvas.getContext('2d') : null;
-              
+              const finalCtx = finalCanvas.getContext('2d');
               if (finalCtx) {
                 finalCtx.drawImage(bgImg, 0, 0);
-                // Draw the car at the same normalized position
-                finalCtx.drawImage(carImg, cropX, cropY, cropW, cropH);
+                // Scale car position/size to new background dimensions so orientation and placement stay correct
+                const scaleX = finalCanvas.width / origW;
+                const scaleY = finalCanvas.height / origH;
+                const dx = cropX * scaleX;
+                const dy = cropY * scaleY;
+                const dw = cropW * scaleX;
+                const dh = cropH * scaleY;
+                finalCtx.drawImage(carImg, 0, 0, cropW, cropH, dx, dy, dw, dh);
                 setImage(finalCanvas.toDataURL(mimeType));
               } else {
                 setImage(newImage);

@@ -426,21 +426,17 @@ export const replaceBackground = async (
     const cleanBase64 = imageBase64.split(',')[1] || imageBase64;
 
     const prompt = `
-      Edit this image to replace the background.
-      
+      Replace ONLY the background in this image. The foreground subject (vehicle/car) must NOT be modified.
+
       TARGET BACKGROUND DESCRIPTION:
       ${backgroundPrompt}
-      
-      STYLE & LIGHTING MATCHING:
-      1. **Global Illumination**: Adjust the lighting on the car/subject to MATCH the new background.
-      2. **Shadows**: Generate realistic contact shadows and cast shadows on the ground.
-      
-      CRITICAL INSTRUCTIONS FOR PRESERVATION:
-      1. **License Plates & Logos**: EXTREME PRIORITY. The vehicle's license plate text and the manufacturer logo/badge MUST be preserved 100% exactly as they appear in the original. Do not generate a new plate. Do not warp the text.
-      2. **Text Integrity**: Any existing text, slogans, or pricing present in the original image MUST be preserved exactly as is.
-      3. **Subject Preservation**: The foreground vehicle (the car) must remain PIXEL-PERFECT. Do not change its geometry, color, or wheels.
-      4. **Professional Compositing**: Blend the car naturally into the new background.
-      
+
+      CRITICAL - SUBJECT (CAR/VEHICLE) PRESERVATION:
+      1. **Do not change the subject at all.** Only replace the background. The car/vehicle must stay exactly as in the original: same position in frame, same orientation, same scale, same perspective, same colors, same reflections, same license plate, same logos and badges. Do not re-pose, re-light, or re-render the vehicle.
+      2. **License plates & logos**: Preserve 100% exactly. No new plate, no warp, no change.
+      3. **Geometry**: The vehicle's shape, wheels, and every detail must remain pixel-perfect. Only the pixels that are clearly background (environment, ground, sky, walls) should change.
+      4. **Compositing**: Generate a new background that fits behind the unchanged subject. Add appropriate shadows on the ground if needed, but do not alter the subject itself.
+
       MANDATORY CLEANUP:
       1. **Remove Legal/Fine Print**: Detect and ERASE any small legal text, disclaimers, or footnotes at the bottom or edges of the image.
     `;

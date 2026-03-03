@@ -92,10 +92,19 @@ const App: React.FC = () => {
     );
   }
 
+  const deploySha = (import.meta as any).env?.VITE_DEPLOY_SHA;
+  const showDeployBanner = deploySha && deploySha !== 'dev';
+
   return (
     <div className="min-h-screen bg-slate-900 text-slate-200 font-sans selection:bg-indigo-500/30">
-      {/* Navbar */}
-      <nav className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-50">
+      <div className="sticky top-0 z-50">
+        {showDeployBanner && (
+          <div className="bg-indigo-600/90 text-white text-center py-1.5 px-2 text-xs font-medium">
+            Update {deploySha}
+          </div>
+        )}
+        {/* Navbar */}
+        <nav className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
@@ -131,6 +140,7 @@ const App: React.FC = () => {
           </div>
         </div>
       </nav>
+      </div>
 
       {/* Main Content */}
       <main className="flex flex-col">
