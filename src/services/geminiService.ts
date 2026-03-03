@@ -428,19 +428,19 @@ export const replaceBackground = async (
     const cleanBase64 = imageBase64.split(',')[1] || imageBase64;
 
     const prompt = `
-      Replace ONLY the background in this image. The foreground subject (vehicle/car) must NOT be modified.
+      Edit this image to replace the background with a new scene. The result must look like one single, natural photograph—not a cut-out or paste.
 
-      TARGET BACKGROUND DESCRIPTION:
+      TARGET BACKGROUND:
       ${backgroundPrompt}
 
-      CRITICAL - SUBJECT (CAR/VEHICLE) PRESERVATION:
-      1. **Do not change the subject at all.** Only replace the background. The car/vehicle must stay exactly as in the original: same position in frame, same orientation, same scale, same perspective, same colors, same reflections, same license plate, same logos and badges. Do not re-pose, re-light, or re-render the vehicle.
-      2. **License plates & logos**: Preserve 100% exactly. No new plate, no warp, no change.
-      3. **Geometry**: The vehicle's shape, wheels, and every detail must remain pixel-perfect. Only the pixels that are clearly background (environment, ground, sky, walls) should change.
-      4. **Compositing**: Generate a new background that fits behind the unchanged subject. Add appropriate shadows on the ground if needed, but do not alter the subject itself.
+      SUBJECT (CAR/VEHICLE):
+      - Keep the car in the same position, orientation, scale, and perspective. Preserve license plate, logos, and text exactly.
+      - Do not add any outline, halo, glow, or colored edge around the car. No magenta, pink, or visible seam. The boundary between the car and the new background must be seamless and photorealistic.
+      - Adjust the lighting and shading on the car to match the new background (e.g. if the new scene is sunset, the car should have warm light and matching shadows) so it looks naturally part of the scene, not pasted on.
+      - Add realistic contact shadows or reflections on the ground where the car meets the new environment.
 
-      MANDATORY CLEANUP:
-      1. **Remove Legal/Fine Print**: Detect and ERASE any small legal text, disclaimers, or footnotes at the bottom or edges of the image.
+      OUTPUT:
+      One coherent image with the new background and the car naturally integrated. Remove any small legal text or disclaimers at the bottom or edges.
     `;
 
     const response = await ai.models.generateContent({
