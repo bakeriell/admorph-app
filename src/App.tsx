@@ -219,13 +219,13 @@ const App: React.FC = () => {
 
         <div className={status !== EditorState.IDLE ? 'block' : 'hidden'}>
           <div className={activeTool === 'BACKGROUND' ? 'block' : 'hidden'}>
-            <BackgroundEditor originalImage={originalImage} onReset={handleReset} />
+            <BackgroundEditor key={originalImage ?? 'idle'} originalImage={originalImage} onReset={handleReset} />
           </div>
           <div className={activeTool === 'TEXT_EDITOR' ? 'block' : 'hidden'}>
-            <TextEditor originalImage={originalImage} onReset={handleReset} activeTool={activeTool} />
+            <TextEditor key={originalImage ?? 'idle'} originalImage={originalImage} onReset={handleReset} activeTool={activeTool} />
           </div>
           <div className={activeTool === 'STORY' ? 'block' : 'hidden'}>
-            <Editor originalImage={originalImage} onReset={handleReset} />
+            <Editor key={originalImage ?? 'idle'} originalImage={originalImage} onReset={handleReset} />
           </div>
         </div>
       </main>
