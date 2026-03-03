@@ -612,13 +612,11 @@ export const detectText = async (image: string): Promise<TextBlock[]> => {
         model,
         contents: {
             parts: [
- { text: `Analyze the image and detect the visible ad copy (headlines and subtitles as well as prices).
+ { text: `Analyze the image and detect ALL visible ad copy: headlines, subtitles, prices, slogans, body copy, and any other text.
 
-CRITICAL - ONE BOX PER VISIBLE REGION: Each element must correspond to exactly ONE visible text region in the image. The "text" must be exactly what is visible in the image at that location—do not invent or duplicate. Do not return two elements with the same text and the same or overlapping bounding box. Each box [x_min, y_min, x_max, y_max] must tightly enclose a single contiguous text region that actually appears in the image.
+For each visible text region, provide its exact text content and bounding box as [x_min, y_min, x_max, y_max]. Return a JSON array of objects with "text" and "box" keys. Do not skip any text.
 
-CRITICAL - DUPLICATE PRICES: When the same number (e.g. a price like "79€") appears in MORE THAN ONE place (e.g. in a headline and again in body/fine print), return a SEPARATE element for EACH occurrence, each with its own distinct bounding box. Do not merge them into one element. The text in each element must match what is actually visible at that location (e.g. you cannot output 79€ in one box and 99€ in another for the same image—both locations show the same value).
-
-For each element provide: exact text content and box as [x_min, y_min, x_max, y_max]. Return a JSON array of objects with "text" and "box" keys.` },
+When the same number or price (e.g. "79€") appears in more than one place (e.g. headline and body), return a SEPARATE element for EACH occurrence with its own bounding box—do not merge them. The text in each element must be exactly what is visible at that location.` },
                 imagePart
             ]
         },
@@ -645,8 +643,7 @@ For each element provide: exact text content and box as [x_min, y_min, x_max, y_
         let jsonText = response.text.trim();
         jsonText = jsonText.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
         try {
-            const raw = JSON.parse(jsonText) as TextBlock[];
-            return deduplicateTextBlocks(raw);
+            return JSON.parse(jsonText) as TextBlock[];
         } catch (parseError) {
             console.error('detectText: JSON parse error:', parseError);
             throw parseError;
@@ -654,29 +651,6 @@ For each element provide: exact text content and box as [x_min, y_min, x_max, y_
     }
     throw new Error("No text part found in response for text detection.");
 };
-
-/** Remove duplicate blocks (same text + overlapping or nearly identical box) so each box corresponds to one visible region. */
-function deduplicateTextBlocks(blocks: TextBlock[]): TextBlock[] {
-    const out: TextBlock[] = [];
-    for (const b of blocks) {
-        const same = out.find(
-            (o) =>
-                o.text.trim() === b.text.trim() &&
-                boxOverlap(o.box, b.box)
-        );
-        if (!same) out.push(b);
-    }
-    return out;
-}
-
-function boxOverlap(a: number[], b: number[]): boolean {
-    if (a.length < 4 || b.length < 4) return false;
-    const margin = 0.15;
-    const ax1 = a[0], ay1 = a[1], ax2 = a[2], ay2 = a[3];
-    const bw = (b[2] - b[0]) * margin, bh = (b[3] - b[1]) * margin;
-    const bx1 = b[0] - bw, by1 = b[1] - bh, bx2 = b[2] + bw, by2 = b[3] + bh;
-    return ax1 < bx2 && ax2 > bx1 && ay1 < by2 && ay2 > by1;
-}
 
 export const removeDisclaimer = async (image: string): Promise<{ image: string; disclaimer: string }> => {
     const ai = getAI();
