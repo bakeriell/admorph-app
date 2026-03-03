@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from './Button';
 import { EditorState, TextBlock } from '../types';
-import { detectText, removeDisclaimer, replaceText, extractLegalText } from '../services/geminiService';
+import { detectText, removeDisclaimer, replaceText, extractLegalText, resizeImageForDetection } from '../services/geminiService';
 import { DraggableText, TextAlign } from './DraggableText';
 import { ImageViewer } from './ImageViewer';
 
@@ -328,31 +328,41 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
 
   const handleInitialProcessing = async (img: string) => {
     setStatus(EditorState.LOADING);
-    setLoadingMessage('Analyzing image...');
+    setLoadingMessage('Preparing image...');
     try {
-      const mimeType = img.match(/data:([^;]+);/)?.[1] || 'image/png';
-      // Run disclaimer extraction and text detection in parallel to speed up (max of both instead of sum)
+      const { dataUrl: resizedUrl, mimeType } = await resizeImageForDetection(img);
       setLoadingMessage('Detecting text...');
-      const [extractedDisclaimer, blocks] = await Promise.all([
-        extractLegalText(img, mimeType),
-        detectText(img),
-      ]);
-      setDisclaimerText(extractedDisclaimer || '');
-
-      const filteredBlocks = blocks.filter(block => {
-        if (!extractedDisclaimer) return true;
-        const cleanExtracted = extractedDisclaimer.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const cleanBlock = block.text.toLowerCase().replace(/[^a-z0-9]/g, '');
-        if (cleanBlock.length < 3) return true;
-        return !cleanExtracted.includes(cleanBlock) && !cleanBlock.includes(cleanExtracted);
-      });
-
-      setTextBlocks(filteredBlocks);
+      // Run text detection first so user sees content quickly; disclaimer extraction in background
+      const blocks = await detectText(resizedUrl);
       const initialEdits: Record<number, string> = {};
-      filteredBlocks.forEach((block, index) => {
+      blocks.forEach((block, index) => {
         initialEdits[index] = block.text;
       });
+      setTextBlocks(blocks);
       setEditedBlocks(initialEdits);
+      setStatus(EditorState.READY);
+      setLoadingMessage('');
+
+      extractLegalText(resizedUrl, mimeType).then((extractedDisclaimer) => {
+        setDisclaimerText(extractedDisclaimer || '');
+        if (!extractedDisclaimer) return;
+        const cleanExtracted = extractedDisclaimer.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const isDisclaimer = (block: { text: string }) => {
+          const cleanBlock = block.text.toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (cleanBlock.length < 3) return false;
+          return cleanExtracted.includes(cleanBlock) || cleanBlock.includes(cleanExtracted);
+        };
+        const indicesToKeep = blocks.map((_, i) => i).filter((i) => !isDisclaimer(blocks[i]));
+        const filteredBlocks = indicesToKeep.map((i) => blocks[i]);
+        setTextBlocks(filteredBlocks);
+        setEditedBlocks((prev) => {
+          const next: Record<number, string> = {};
+          indicesToKeep.forEach((oldIdx, newIdx) => {
+            next[newIdx] = prev[oldIdx] ?? blocks[oldIdx].text;
+          });
+          return next;
+        });
+      }).catch(() => {});
     } catch (e: any) {
       if (e.message === 'INVALID_API_KEY' || e.message === 'MODEL_NOT_FOUND') {
         throw e;
@@ -360,6 +370,7 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
       console.error("Error in initial processing:", e);
     } finally {
       setStatus(EditorState.READY);
+      setLoadingMessage('');
     }
   };
 

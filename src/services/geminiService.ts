@@ -20,6 +20,36 @@ const getAI = () => {
   return new GoogleGenAI({ apiKey });
 };
 
+/** Resize image to max 1200px on longest side for faster API calls. Returns original if already small. */
+export async function resizeImageForDetection(dataUrl: string, maxSize = 1200): Promise<{ dataUrl: string; mimeType: string }> {
+  const mimeType = dataUrl.match(/data:([^;]+);/)?.[1] || 'image/png';
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const w = img.naturalWidth;
+      const h = img.naturalHeight;
+      if (w <= maxSize && h <= maxSize) {
+        resolve({ dataUrl, mimeType });
+        return;
+      }
+      const scale = maxSize / Math.max(w, h);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(w * scale);
+      canvas.height = Math.round(h * scale);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve({ dataUrl, mimeType });
+        return;
+      }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve({ dataUrl: canvas.toDataURL('image/png'), mimeType: 'image/png' });
+    };
+    img.onerror = () => reject(new Error('Failed to load image for resize'));
+    img.src = dataUrl;
+  });
+}
+
 export const extractLegalText = async (
   imageBase64: string,
   mimeType: string
@@ -582,7 +612,7 @@ export const detectText = async (image: string): Promise<TextBlock[]> => {
         model,
         contents: {
             parts: [
-                { text: 'Analyze the image and detect ALL visible ad copy. Return each distinct text element as a SEPARATE item: main headline, subheadline, price, offer, slogan, CTA, badge text—one item per logical block. Use the exact text as shown (including numbers, symbols, line breaks). For each item provide "text" (exact string) and "box" ([x_min, y_min, x_max, y_max]). Return a JSON array of objects with "text" and "box" keys only. Do not merge different lines or blocks.' },
+                { text: 'List all visible text in this ad. JSON array: each item {"text": "exact string", "box": [x_min, y_min, x_max, y_max]}. One item per headline, subhead, price, slogan, CTA, or other block. Preserve exact text. Normalize box to 0-1 or 0-1000.' },
                 imagePart
             ]
         },
