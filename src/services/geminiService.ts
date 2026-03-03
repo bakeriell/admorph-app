@@ -430,6 +430,8 @@ export const replaceBackground = async (
     const prompt = `
       Edit this image to replace the background with a new scene. The result must look like one single, natural photograph—not a cut-out or paste.
 
+      MANDATORY: Always remove all disclaimer text, legal text, fine print, footnotes, and terms-and-conditions text from the bottom or edges of the image. The output must have no such text visible. Fill those areas seamlessly with the new background or appropriate surface.
+
       TARGET BACKGROUND:
       ${backgroundPrompt}
 
@@ -440,7 +442,7 @@ export const replaceBackground = async (
       - Add realistic contact shadows or reflections on the ground where the car meets the new environment.
 
       OUTPUT:
-      One coherent image with the new background and the car naturally integrated. Remove any small legal text or disclaimers at the bottom or edges.
+      One coherent image with the new background and the car naturally integrated. No disclaimer or legal text may remain.
     `;
 
     const response = await ai.models.generateContent({
