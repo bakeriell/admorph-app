@@ -247,12 +247,12 @@ export const segmentElement = async (
       
       const prompt = `
         Edit this image crop.
-        TASK: Isolate the **${elementLabel}** and remove the background.
+        TASK: Isolate the **${elementLabel}** only. Everything that is NOT the ${elementLabel} must become one flat color.
         
         INSTRUCTIONS:
         1. Keep the ${elementLabel} exactly as it is (pixels, colors, lighting). Do not change the object itself.
-        2. Replace the ENTIRE background around the ${elementLabel} with pure solid MAGENTA color (Hex code: #FF00FF).
-        3. Ensure the edges are sharp and clean.
+        2. Replace the ENTIRE background (sky, ground, anything behind or beside the ${elementLabel}) with a single flat color: pure magenta RGB(255,0,255) or #FF00FF. No gradients, no shadows, no variation—only solid flat magenta outside the ${elementLabel}.
+        3. Edges of the ${elementLabel} must be sharp and clean against the magenta. Do not leave any non-magenta background pixels.
       `;
   
       const response = await ai.models.generateContent({

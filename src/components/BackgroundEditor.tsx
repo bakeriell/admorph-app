@@ -93,7 +93,7 @@ export const BackgroundEditor: React.FC<BackgroundEditorProps> = ({ originalImag
 
   const imageRef = useRef<HTMLImageElement>(null);
 
-  // Helper to remove magenta background (chroma key)
+  // Helper to remove magenta background (chroma key). Aggressive so no magenta blocks leak into result.
   const removeMagentaBackground = (dataUrl: string): Promise<string> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -103,19 +103,15 @@ export const BackgroundEditor: React.FC<BackgroundEditorProps> = ({ originalImag
         canvas.height = img.height;
         const ctx = canvas.getContext('2d');
         if (!ctx) return reject('No context');
-        
         ctx.drawImage(img, 0, 0);
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const data = imageData.data;
-        const threshold = 80; 
-        
         for (let i = 0; i < data.length; i += 4) {
           const r = data[i];
           const g = data[i + 1];
           const b = data[i + 2];
-          if (r > 255 - threshold && g < threshold && b > 255 - threshold) {
-            data[i + 3] = 0; 
-          }
+          const isMagenta = (r > 135 && b > 135 && g < 120) || (r > 200 && b > 200 && g < 80);
+          if (isMagenta) data[i + 3] = 0;
         }
         ctx.putImageData(imageData, 0, 0);
         resolve(canvas.toDataURL());
@@ -123,6 +119,28 @@ export const BackgroundEditor: React.FC<BackgroundEditorProps> = ({ originalImag
       img.onerror = reject;
       img.src = dataUrl;
     });
+  };
+
+  // If composite still has a lot of magenta (chroma key failed), use AI-only result instead.
+  const hasTooMuchMagenta = (canvas: HTMLCanvasElement, x: number, y: number, w: number, h: number): boolean => {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return false;
+    const ix = Math.max(0, Math.floor(x));
+    const iy = Math.max(0, Math.floor(y));
+    const iw = Math.min(canvas.width - ix, Math.ceil(w));
+    const ih = Math.min(canvas.height - iy, Math.ceil(h));
+    if (iw <= 0 || ih <= 0) return false;
+    const imageData = ctx.getImageData(ix, iy, iw, ih);
+    const data = imageData.data;
+    let magentaCount = 0;
+    const total = (iw * ih);
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      if (r > 200 && b > 200 && g < 80) magentaCount++;
+    }
+    return total > 0 && magentaCount / total > 0.03;
   };
 
   useEffect(() => {
@@ -259,8 +277,16 @@ export const BackgroundEditor: React.FC<BackgroundEditorProps> = ({ originalImag
               finalCtx.drawImage(bgImg, 0, 0);
               const scaleX = finalCanvas.width / origW;
               const scaleY = finalCanvas.height / origH;
-              finalCtx.drawImage(carImg, 0, 0, cropW, cropH, cropX * scaleX, cropY * scaleY, cropW * scaleX, cropH * scaleY);
-              setImage(finalCanvas.toDataURL(mimeType));
+              const dx = cropX * scaleX;
+              const dy = cropY * scaleY;
+              const dw = cropW * scaleX;
+              const dh = cropH * scaleY;
+              finalCtx.drawImage(carImg, 0, 0, cropW, cropH, dx, dy, dw, dh);
+              if (hasTooMuchMagenta(finalCanvas, dx, dy, dw, dh)) {
+                setImage(newImage);
+              } else {
+                setImage(finalCanvas.toDataURL(mimeType));
+              }
             } else {
               setImage(newImage);
             }
