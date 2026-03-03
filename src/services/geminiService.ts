@@ -748,7 +748,8 @@ export async function verifyReplacements(imageBase64: string, expectedNewTexts: 
 
 function buildReplaceTextPrompt(
     changes: { oldText: string; newText: string }[],
-    retryMissing?: string[]
+    retryMissing?: string[],
+    userPrompt?: string
 ): string {
     const escapeForPrompt = (s: string) =>
         (s ?? '')
@@ -766,13 +767,22 @@ Apply every one above. Use the exact same font and style as the original. No def
 `
         : '';
 
+    const userInstructions =
+        userPrompt && userPrompt.trim()
+            ? `
+USER INSTRUCTIONS (follow these when applying changes):
+"${escapeForPrompt(userPrompt.trim())}"
+`
+            : '';
+
     return `
 OUTPUT RULES (non-negotiable):
 1. The output image must contain ZERO disclaimer, legal, terms, fine print, or footnote text. Erase all such text; fill with background. Completely disclaimer-free.
-2. Apply every replacement below. Each changed part must appear in the output exactly as given. Do not skip any.
+2. Apply every replacement below. Replace the ENTIRE old text with the ENTIRE new text—do not truncate or omit any part, even if the text is long or has multiple lines. Each changed part must appear in the output exactly as given. Do not skip any.
 3. Every text and number must use the EXACT SAME font family, weight, size, and style as the original in that location. No substitution. Numbers and digits must not be deformed, stretched, or use a different typeface—match the original typography precisely.
 4. Before returning the image: cross-check that each "NEW" text from the list is present and correct in the image; fix any that are missing or wrong.
 ${retrySection}
+${userInstructions}
 
 REPLACEMENTS (apply each one in order; total = ${n}):
 
@@ -781,18 +791,22 @@ ${changes.map((c, i) => {
         const newStr = escapeForPrompt(c.newText ?? '');
         return `[${i + 1}] Locate: "${oldStr}"
     Replace with: "${newStr}"
-    Use same font, size, color, position. Verify numbers/digits are crisp and match original style. (Use \\n for line breaks if needed.)`;
+    Use same font, size, color, position. Verify numbers/digits are crisp and match original style. (Use \\n for line breaks if needed. For long text, render the full string.)`;
     }).join('\n\n')}
 
 CHECKLIST BEFORE RETURNING:
-- Every replacement 1 to ${n} has been applied and is visible in the image.
+- Every replacement 1 to ${n} has been applied in full and is visible in the image.
 - No disclaimer or legal text remains anywhere.
 - All text and numbers match the original typography; no deformation.
 - Subject, logos, and license plates are unchanged.
 `;
 }
 
-export const replaceText = async (image: string, changes: { oldText: string; newText: string }[]): Promise<string> => {
+export const replaceText = async (
+    image: string,
+    changes: { oldText: string; newText: string }[],
+    userPrompt?: string
+): Promise<string> => {
     const ai = getAI();
     const imagePart = {
         inlineData: {
@@ -802,7 +816,7 @@ export const replaceText = async (image: string, changes: { oldText: string; new
     };
 
     const doGenerate = async (retryMissing?: string[]): Promise<string> => {
-        const prompt = buildReplaceTextPrompt(changes, retryMissing);
+        const prompt = buildReplaceTextPrompt(changes, retryMissing, userPrompt);
         const response = await ai.models.generateContent({
             model: IMAGE_MODEL_NAME,
             contents: {

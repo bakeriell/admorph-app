@@ -33,6 +33,8 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
   const [disclaimerText, setDisclaimerText] = useState<string>('');
   const [disclaimerOverlay, setDisclaimerOverlay] = useState<TextOverlayData | null>(null);
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
+  const [selectedBlockIndex, setSelectedBlockIndex] = useState<number | null>(null);
+  const [retryPrompt, setRetryPrompt] = useState('');
   const [isViewerOpen, setIsViewerOpen] = useState(false);
   const [containerDims, setContainerDims] = useState({ width: 0, height: 0 });
 
@@ -139,7 +141,7 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
 
     try {
       // Always use current image as source (original or last generated). If a previous apply missed some changes, the next apply uses this updated image so edits accumulate correctly.
-      const newImage = await replaceText(image, changes);
+      const newImage = await replaceText(image, changes, retryPrompt.trim() || undefined);
       setImage(newImage);
       setStatus(EditorState.READY);
       setLoadingMessage('');
@@ -380,6 +382,7 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
       setEditedBlocks({});
       setDisclaimerText('');
       setDisclaimerOverlay(null);
+      setSelectedBlockIndex(null);
       setStatus(EditorState.IDLE);
     }
   }, [originalImage]);
@@ -485,9 +488,15 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
                   textBlocks.map((block, index) => (
                     <div key={index} className="group relative">
                       <textarea
+                        id={`text-block-${index}`}
                         value={editedBlocks[index] || ''}
                         onChange={(e) => handleTextBlockChange(index, e.target.value)}
-                        className="w-full bg-slate-900/50 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-300 focus:ring-1 focus:ring-indigo-500 outline-none transition-all group-hover:border-slate-700"
+                        onFocus={() => setSelectedBlockIndex(index)}
+                        className={`w-full bg-slate-900/50 border rounded-lg p-2.5 text-xs text-slate-300 outline-none transition-all group-hover:border-slate-700 ${
+                          selectedBlockIndex === index
+                            ? 'border-indigo-500 ring-2 ring-indigo-500/30 focus:ring-2 focus:ring-indigo-500'
+                            : 'border-slate-800 focus:ring-1 focus:ring-indigo-500'
+                        }`}
                         rows={2}
                       />
                       <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -612,14 +621,57 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
           )}
           {image ? (
             <div className="relative flex flex-col items-center gap-3">
-                <div className="relative">
+                <div className="relative inline-block">
                   <img 
                     ref={imageRef} 
                     src={image} 
                     alt="Edited creative" 
-                    className="max-h-[80vh] max-w-full object-contain cursor-pointer hover:opacity-95 transition-opacity" 
-                    onClick={() => setIsViewerOpen(true)}
+                    className="block max-h-[80vh] max-w-full object-contain cursor-pointer hover:opacity-95 transition-opacity" 
                   />
+                  {/* Clickable layer: click on image opens viewer and clears block selection */}
+                  <div
+                    className="absolute inset-0 cursor-pointer"
+                    onClick={() => {
+                      setSelectedBlockIndex(null);
+                      setIsViewerOpen(true);
+                    }}
+                    aria-hidden
+                  />
+                  {/* Magic select: overlay boxes for each detected text block; click to select and jump to that text box */}
+                  {textBlocks.length > 0 && (
+                    <div className="absolute inset-0 pointer-events-none">
+                      <div className="absolute inset-0 pointer-events-auto">
+                        {textBlocks.map((block, i) => {
+                          const b = block.box;
+                          const scale = b.some((n) => n > 1) ? 1000 : 1;
+                          const isSelected = selectedBlockIndex === i;
+                          return (
+                            <div
+                              key={i}
+                              className={`absolute cursor-pointer border-2 transition-all pointer-events-auto ${
+                                isSelected
+                                  ? 'border-indigo-400 bg-indigo-400/25 ring-2 ring-indigo-400/50'
+                                  : 'border-indigo-400/60 bg-indigo-400/10 hover:bg-indigo-400/20 hover:border-indigo-400/80'
+                              }`}
+                              style={{
+                                left: `${(b[0] / scale) * 100}%`,
+                                top: `${(b[1] / scale) * 100}%`,
+                                width: `${((b[2] - b[0]) / scale) * 100}%`,
+                                height: `${((b[3] - b[1]) / scale) * 100}%`,
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedBlockIndex(i);
+                                setSelectedTextId(null);
+                                document.getElementById(`text-block-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                              }}
+                              title={`Block ${i + 1}: ${block.text.slice(0, 40)}${block.text.length > 40 ? '…' : ''}`}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                   <ImageViewer 
                     isOpen={isViewerOpen} 
                     onClose={() => setIsViewerOpen(false)} 
@@ -640,15 +692,30 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
                   )}
                 </div>
                 {textBlocks.length > 0 && (
-                  <Button
-                    onClick={handleReplaceText}
-                    disabled={status === EditorState.LOADING}
-                    variant="outline"
-                    className="text-sm py-2 px-4 border-slate-600 text-slate-300 hover:bg-slate-700/50"
-                    icon={<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>}
-                  >
-                    {status === EditorState.LOADING ? 'Generating...' : 'Retry'}
-                  </Button>
+                  <>
+                    <Button
+                      onClick={handleReplaceText}
+                      disabled={status === EditorState.LOADING}
+                      variant="outline"
+                      className="text-sm py-2 px-4 border-slate-600 text-slate-300 hover:bg-slate-700/50"
+                      icon={<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>}
+                    >
+                      {status === EditorState.LOADING ? 'Generating...' : 'Retry'}
+                    </Button>
+                    <div className="w-full max-w-lg space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">
+                        Extra instructions for Retry / Apply
+                      </label>
+                      <textarea
+                        value={retryPrompt}
+                        onChange={(e) => setRetryPrompt(e.target.value)}
+                        placeholder="e.g. Make the headline bolder, fix the price, use the full text without cutting off..."
+                        className="w-full bg-slate-900/80 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-300 placeholder-slate-500 focus:ring-1 focus:ring-indigo-500 outline-none resize-y min-h-[60px]"
+                        rows={2}
+                      />
+                      <p className="text-[9px] text-slate-500">Used when you click Retry or Apply Changes.</p>
+                    </div>
+                  </>
                 )}
             </div>
           ) : (
