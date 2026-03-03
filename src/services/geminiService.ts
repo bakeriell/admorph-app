@@ -729,16 +729,22 @@ export const replaceText = async (image: string, changes: { oldText: string; new
     };
 
     const prompt = `
-    Perform the following text replacements on the image:
-    ${changes.map(c => `- Replace \"${c.oldText}\" with \"${c.newText}\"`).join('\n')}
-    
+    Apply every text replacement below. You must perform ALL of them; do not skip or merge any. Each bullet is one required replacement.
+
+    REPLACEMENTS (apply every one):
+    ${changes.map((c, i) => {
+      const oldStr = (c.oldText ?? '').replace(/\n/g, ' ').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      const newStr = (c.newText ?? '').replace(/\n/g, ' ').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      return `${i + 1}. Replace this exact text: "${oldStr}" → with: "${newStr}"`;
+    }).join('\n')}
+
     MANDATORY CLEANUP:
     1. **Remove Legal/Fine Print**: Detect and ERASE any small legal text, disclaimers, or footnotes at the bottom or edges of the image.
 
     CRITICAL QUALITY RULES:
     1. **Preserve Subject**: The vehicle (car), its geometry, lighting, and reflections must remain 100% identical.
     2. **Logos & Plates**: The car manufacturer logo (badge) and the license plate MUST be preserved PIXEL-PERFECT. Do not blur, warp, or change even a single character on the plate.
-    3. **Seamless Text**: Match the original font, style, color, and positioning exactly. The replacement must look native to the photo.
+    3. **Seamless Text**: Match the original font, style, color, and positioning. Long lines must stay on one line or wrap as in the original. The replacement must look native to the photo.
     4. **No Hallucinations**: Do not add or change anything else in the image.
     `;
 

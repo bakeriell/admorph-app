@@ -124,33 +124,37 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
     setStatus(EditorState.LOADING);
     setLoadingMessage('Generating high-quality image...');
 
-    const changes = textBlocks.map((block, index) => ({
+    const changes = textBlocks
+      .map((block, index) => ({
         oldText: block.text,
-        newText: editedBlocks[index],
-    })).filter(change => change.oldText !== change.newText);
+        newText: editedBlocks[index] ?? block.text,
+      }))
+      .filter(change => change.oldText !== change.newText);
+
+    if (changes.length === 0) {
+      setStatus(EditorState.READY);
+      return;
+    }
 
     try {
-      console.log('Starting text replacement...');
-      // replaceText now also handles disclaimer removal via prompt
       const newImage = await replaceText(image, changes);
-      console.log('Text replacement successful, updating image...');
       setImage(newImage);
-      
-      // Re-detect to update blocks
-      console.log('Starting re-detection...');
-      setLoadingMessage('Finalizing...');
-      const blocks = await detectText(newImage);
-      console.log('Re-detection successful:', blocks);
-      setTextBlocks(blocks);
-      const initialEdits: Record<number, string> = {};
-      blocks.forEach((block, index) => {
-        initialEdits[index] = block.text;
-      });
-      setEditedBlocks(initialEdits);
+      setStatus(EditorState.READY);
+      setLoadingMessage('');
 
-      // Add disclaimer overlay after generating
+      // Re-detect in background to update blocks (don't block UI)
+      detectText(newImage)
+        .then(blocks => {
+          setTextBlocks(blocks);
+          const initialEdits: Record<number, string> = {};
+          blocks.forEach((block, index) => {
+            initialEdits[index] = block.text;
+          });
+          setEditedBlocks(initialEdits);
+        })
+        .catch(() => {});
+
       if (disclaimerText && containerDims.width > 0) {
-        console.log('Adding disclaimer overlay...');
         setDisclaimerOverlay({
           id: 'disclaimer-overlay',
           text: disclaimerText,
@@ -164,14 +168,13 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
           color: '#FFFFFF',
         });
       }
-      console.log('handleReplaceText completed successfully');
     } catch (e: any) {
       if (e.message === 'INVALID_API_KEY' || e.message === 'MODEL_NOT_FOUND') {
         throw e;
       }
       console.error("Error replacing text:", e);
-    } finally {
       setStatus(EditorState.READY);
+      setLoadingMessage('');
     }
   };
 
