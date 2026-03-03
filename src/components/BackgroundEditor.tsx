@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from './Button';
 import { EditorState } from '../types';
-import { replaceBackground, extractLegalText, detectMovableElements, segmentElement } from '../services/geminiService';
+import { replaceBackground, extractLegalText } from '../services/geminiService';
 import { DraggableText, TextAlign } from './DraggableText';
 import { ImageViewer } from './ImageViewer';
 
@@ -82,7 +82,6 @@ export const BackgroundEditor: React.FC<BackgroundEditorProps> = ({ originalImag
   const [activeTab, setActiveTab] = useState<Category>('Studio');
   const [selectedPreset, setSelectedPreset] = useState<string>('studio_dark');
   const [customPrompt, setCustomPrompt] = useState<string>('');
-  const [highFidelity, setHighFidelity] = useState<boolean>(false);
 
   const [extractedLegalText, setExtractedLegalText] = useState<string>('');
   const [isExtractingText, setIsExtractingText] = useState(false);
@@ -92,56 +91,6 @@ export const BackgroundEditor: React.FC<BackgroundEditorProps> = ({ originalImag
   const [containerDims, setContainerDims] = useState({ width: 0, height: 0 });
 
   const imageRef = useRef<HTMLImageElement>(null);
-
-  // Helper to remove magenta background (chroma key). Aggressive so no magenta blocks leak into result.
-  const removeMagentaBackground = (dataUrl: string): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return reject('No context');
-        ctx.drawImage(img, 0, 0);
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageData.data;
-        for (let i = 0; i < data.length; i += 4) {
-          const r = data[i];
-          const g = data[i + 1];
-          const b = data[i + 2];
-          const isMagenta = (r > 135 && b > 135 && g < 120) || (r > 200 && b > 200 && g < 80);
-          if (isMagenta) data[i + 3] = 0;
-        }
-        ctx.putImageData(imageData, 0, 0);
-        resolve(canvas.toDataURL());
-      };
-      img.onerror = reject;
-      img.src = dataUrl;
-    });
-  };
-
-  // If composite still has a lot of magenta (chroma key failed), use AI-only result instead.
-  const hasTooMuchMagenta = (canvas: HTMLCanvasElement, x: number, y: number, w: number, h: number): boolean => {
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return false;
-    const ix = Math.max(0, Math.floor(x));
-    const iy = Math.max(0, Math.floor(y));
-    const iw = Math.min(canvas.width - ix, Math.ceil(w));
-    const ih = Math.min(canvas.height - iy, Math.ceil(h));
-    if (iw <= 0 || ih <= 0) return false;
-    const imageData = ctx.getImageData(ix, iy, iw, ih);
-    const data = imageData.data;
-    let magentaCount = 0;
-    const total = (iw * ih);
-    for (let i = 0; i < data.length; i += 4) {
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-      if (r > 200 && b > 200 && g < 80) magentaCount++;
-    }
-    return total > 0 && magentaCount / total > 0.03;
-  };
 
   useEffect(() => {
     const handleInitialProcessing = async () => {
@@ -229,79 +178,7 @@ export const BackgroundEditor: React.FC<BackgroundEditorProps> = ({ originalImag
       const mimeType = originalImage.match(/data:([^;]+);/)?.[1] || 'image/png';
 
       const newImage = await replaceBackground(originalImage, mimeType, activePrompt);
-
-      if (highFidelity) {
-        const elements = await detectMovableElements(originalImage, mimeType);
-        const labelLower = (l: string) => l.toLowerCase();
-        const vehicle = elements.find(el => {
-          const l = labelLower(el.label);
-          return l.includes('product') || l.includes('vehicle') || l.includes('car') || l.includes('automobile');
-        });
-
-      if (vehicle) {
-        try {
-          const [ymin, xmin, ymax, xmax] = vehicle.box_2d;
-          const originalImg = new Image();
-          await new Promise((resolve) => { originalImg.onload = resolve; originalImg.src = originalImage; });
-
-          const origW = originalImg.naturalWidth;
-          const origH = originalImg.naturalHeight;
-          const cropW = (xmax - xmin) * origW / 1000;
-          const cropH = (ymax - ymin) * origH / 1000;
-          const cropX = xmin * origW / 1000;
-          const cropY = ymin * origH / 1000;
-
-          const cropCanvas = document.createElement('canvas');
-          cropCanvas.width = cropW;
-          cropCanvas.height = cropH;
-          const cropCtx = cropCanvas.getContext('2d');
-          if (cropCtx) {
-            cropCtx.drawImage(originalImg, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
-            const cropBase64 = cropCanvas.toDataURL(mimeType);
-
-            const segmented = await segmentElement(cropBase64, mimeType, vehicle.label);
-            const transparentCar = await removeMagentaBackground(segmented);
-
-            const bgImg = new Image();
-            const carImg = new Image();
-            await new Promise((resolve) => { bgImg.onload = resolve; bgImg.src = newImage; });
-            await new Promise((resolve) => { carImg.onload = resolve; carImg.src = transparentCar; });
-
-            const finalCanvas = document.createElement('canvas');
-            finalCanvas.width = bgImg.naturalWidth;
-            finalCanvas.height = bgImg.naturalHeight;
-            const finalCtx = finalCanvas.getContext('2d');
-            if (finalCtx) {
-              finalCtx.drawImage(bgImg, 0, 0);
-              const scaleX = finalCanvas.width / origW;
-              const scaleY = finalCanvas.height / origH;
-              const dx = cropX * scaleX;
-              const dy = cropY * scaleY;
-              const dw = cropW * scaleX;
-              const dh = cropH * scaleY;
-              finalCtx.drawImage(carImg, 0, 0, cropW, cropH, dx, dy, dw, dh);
-              if (hasTooMuchMagenta(finalCanvas, dx, dy, dw, dh)) {
-                setImage(newImage);
-              } else {
-                setImage(finalCanvas.toDataURL(mimeType));
-              }
-            } else {
-              setImage(newImage);
-            }
-          } else {
-            setImage(newImage);
-          }
-        } catch (fidelityError) {
-          console.warn("Car composite failed, using AI result:", fidelityError);
-          setImage(newImage);
-        }
-      } else {
-        setImage(newImage);
-      }
-      } else {
-        setImage(newImage);
-      }
-      
+      setImage(newImage);
       setStatus(EditorState.COMPLETE);
     } catch (error: any) {
       if (error.message === 'INVALID_API_KEY' || error.message === 'MODEL_NOT_FOUND') {
@@ -468,18 +345,7 @@ export const BackgroundEditor: React.FC<BackgroundEditorProps> = ({ originalImag
 
             {/* Refine Prompt */}
             <div className="space-y-2 mb-6">
-              <div className="flex items-center justify-between gap-2">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Refine Prompt (Optional)</label>
-                <label className="flex items-center gap-2 cursor-pointer group shrink-0">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest group-hover:text-indigo-400">Preserve car exactly</span>
-                  <input
-                    type="checkbox"
-                    checked={highFidelity}
-                    onChange={(e) => setHighFidelity(e.target.checked)}
-                    className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
-                  />
-                </label>
-              </div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Refine Prompt (Optional)</label>
               <textarea 
                 value={customPrompt}
                 onChange={(e) => setCustomPrompt(e.target.value)}
