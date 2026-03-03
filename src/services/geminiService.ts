@@ -33,10 +33,11 @@ const getAI = () => {
   // Prioritize keys in this order:
   // 1. window.process.env.API_KEY (platform injection)
   // 2. process.env.API_KEY (Vite define)
-  // 3. process.env.GEMINI_API_KEY (Vite define)
+  // 3. process.env.GEMINI_API_KEY / Gemini_API_KEY (Vite define, e.g. Vercel env)
   const apiKey = getSafeKey((window as any).process?.env?.API_KEY) || 
                  getSafeKey(process.env.API_KEY) || 
                  getSafeKey(process.env.GEMINI_API_KEY) ||
+                 getSafeKey((process.env as any).Gemini_API_KEY) ||
                  getSafeKey(process.env.GOOGLE_API_KEY);
 
   if (!apiKey) {

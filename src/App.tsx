@@ -30,6 +30,7 @@ const App: React.FC = () => {
                      getSafeKey((window as any).process?.env?.GEMINI_API_KEY) ||
                      getSafeKey(process.env.API_KEY) ||
                      getSafeKey(process.env.GEMINI_API_KEY) ||
+                     getSafeKey((process.env as any).Gemini_API_KEY) ||
                      getSafeKey(process.env.GOOGLE_API_KEY) ||
                      getSafeKey((import.meta as any).env?.VITE_GEMINI_API_KEY);
 
