@@ -434,7 +434,7 @@ export const replaceBackground = async (
       ${backgroundPrompt}
 
       SUBJECT (CAR/VEHICLE):
-      - Keep the car in the same position, orientation, scale, and perspective. Preserve license plate, logos, and text exactly.
+      - Keep the car in the same position, orientation, scale, and perspective. Preserve license plate, logos, and text exactly. Also keep the car's details exactly as is.
       - Do not add any outline, halo, glow, or colored edge around the car. No magenta, pink, or visible seam. The boundary between the car and the new background must be seamless and photorealistic.
       - Adjust the lighting and shading on the car to match the new background (e.g. if the new scene is sunset, the car should have warm light and matching shadows) so it looks naturally part of the scene, not pasted on.
       - Add realistic contact shadows or reflections on the ground where the car meets the new environment.
