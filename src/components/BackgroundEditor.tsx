@@ -82,7 +82,7 @@ export const BackgroundEditor: React.FC<BackgroundEditorProps> = ({ originalImag
   const [activeTab, setActiveTab] = useState<Category>('Studio');
   const [selectedPreset, setSelectedPreset] = useState<string>('studio_dark');
   const [customPrompt, setCustomPrompt] = useState<string>('');
-  // Car is always preserved (high-fidelity composite). No toggle.
+  const [highFidelity, setHighFidelity] = useState<boolean>(false);
 
   const [extractedLegalText, setExtractedLegalText] = useState<string>('');
   const [isExtractingText, setIsExtractingText] = useState(false);
@@ -228,17 +228,15 @@ export const BackgroundEditor: React.FC<BackgroundEditorProps> = ({ originalImag
     try {
       const mimeType = originalImage.match(/data:([^;]+);/)?.[1] || 'image/png';
 
-      // Run background generation and vehicle detection in parallel (faster)
-      const [newImage, elements] = await Promise.all([
-        replaceBackground(originalImage, mimeType, activePrompt),
-        detectMovableElements(originalImage, mimeType),
-      ]);
+      const newImage = await replaceBackground(originalImage, mimeType, activePrompt);
 
-      const labelLower = (l: string) => l.toLowerCase();
-      const vehicle = elements.find(el => {
-        const l = labelLower(el.label);
-        return l.includes('product') || l.includes('vehicle') || l.includes('car') || l.includes('automobile');
-      });
+      if (highFidelity) {
+        const elements = await detectMovableElements(originalImage, mimeType);
+        const labelLower = (l: string) => l.toLowerCase();
+        const vehicle = elements.find(el => {
+          const l = labelLower(el.label);
+          return l.includes('product') || l.includes('vehicle') || l.includes('car') || l.includes('automobile');
+        });
 
       if (vehicle) {
         try {
@@ -297,6 +295,9 @@ export const BackgroundEditor: React.FC<BackgroundEditorProps> = ({ originalImag
           console.warn("Car composite failed, using AI result:", fidelityError);
           setImage(newImage);
         }
+      } else {
+        setImage(newImage);
+      }
       } else {
         setImage(newImage);
       }
@@ -467,7 +468,18 @@ export const BackgroundEditor: React.FC<BackgroundEditorProps> = ({ originalImag
 
             {/* Refine Prompt */}
             <div className="space-y-2 mb-6">
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Refine Prompt (Optional)</label>
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Refine Prompt (Optional)</label>
+                <label className="flex items-center gap-2 cursor-pointer group shrink-0">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest group-hover:text-indigo-400">Preserve car exactly</span>
+                  <input
+                    type="checkbox"
+                    checked={highFidelity}
+                    onChange={(e) => setHighFidelity(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+                  />
+                </label>
+              </div>
               <textarea 
                 value={customPrompt}
                 onChange={(e) => setCustomPrompt(e.target.value)}

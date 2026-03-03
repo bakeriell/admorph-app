@@ -139,11 +139,11 @@ export const generateFormatConversion = async (
     switch (targetRatio) {
         case '9:16':
             layoutPrompt = `
-              TRANSFORMATION TARGET: Vertical 9:16 Story Format.
+              TRANSFORMATION TARGET: Vertical 9:16 Story Format. Fill the frame; avoid large empty areas.
               LAYOUT STRATEGY:
-              - **Vertical Expansion**: The canvas is getting taller.
-              - **Action**: Center the main content vertically. Extend the background environment (floor, sky, ceiling) upwards and downwards to fill the new space.
-              - **Text Safe Zone**: EXTEND the bottom area (bottom 15-20%) with clean, simple textures (e.g., extended road, concrete floor, or shadow) to create a \"quiet zone\". This area MUST be uncluttered to allow for the placement of UI buttons or text overlays.
+              - **Fill the frame**: Scale and position the main subject (vehicle/product) and all ad copy so the composition uses the full vertical space. Do not leave big empty bands at top or bottom. The subject and headline/CTA should feel intentionally placed, not floating in the middle with empty space above and below.
+              - **Vertical balance**: Extend the background (floor, sky, road, environment) naturally up and down to fill 9:16. Keep the main subject and key text in the central 60–70% of the frame so the ad feels full and intentional. If the original has a headline, subhead, or CTA, reposition them to sit close to the subject or in a compact block (e.g. lower third) so there is minimal wasted space.
+              - **Text Safe Zone**: Reserve only the bottom 10–15% as a clean, uncluttered strip (simple texture or shadow) for legal disclaimers. The rest of the frame should feel filled with the ad content.
             `;
             break;
         case '16:9':
@@ -170,6 +170,7 @@ export const generateFormatConversion = async (
 
     const prompt = `
       Reshape and adapt this advertisement creative into a high-quality ${targetRatio} format.
+      ${targetRatio === '9:16' ? 'For story format: use the full frame; position subject and text so the layout feels full with minimal empty space.' : ''}
 
       ${layoutPrompt}
 

@@ -212,7 +212,7 @@ const App: React.FC = () => {
             </div>
             
             <div className="w-full max-w-xl mx-auto">
-              <ImageUpload onImageSelected={handleImageSelected} state={status} />
+              <ImageUpload key={originalImage ? 'has-image' : 'idle'} onImageSelected={handleImageSelected} state={status} />
             </div>
           </div>
         </div>
