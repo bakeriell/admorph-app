@@ -1,0 +1,5 @@
+{
+  "name": "Senza(Tante)Bestemmie",
+  "description": "Intelligent ad format converter using Gemini 2.5 Flash Image. Seamlessly transforms feed ads to any format with smart text repositioning and outpainting.",
+  "requestFramePermissions": []
+}
