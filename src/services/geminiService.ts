@@ -188,6 +188,10 @@ export const generateFormatConversion = async (
          - **License Plates & Emblems**: The text/numbers on vehicle license plates and the car manufacturer logo/badge MUST be preserved pixel-perfect. Do not blur, warp, or 'AI-hallucinate' new text.
       2. **Subject Integrity**: The main product/vehicle/subject must remain undistorted and sharp.
 
+      CRITICAL - NO DUPLICATION:
+      - Do NOT duplicate any elements. The output must contain each subject, vehicle, product, person, headline, logo, and text block exactly ONCE—the same elements as the input, possibly scaled or repositioned to fit the new format.
+      - Only extend or fill new space with background (sky, floor, environment). Do not copy, repeat, or mirror the main subject or key content into the extended areas.
+
       MANDATORY CLEANUP:
       1. **Remove Legal/Fine Print**: Detect and ERASE small legal text at the bottom/edges to declutter the new layout. (We will re-add it manually in the safe zone created).
 
