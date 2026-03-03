@@ -144,15 +144,17 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
       setStatus(EditorState.READY);
       setLoadingMessage('');
 
-      // Re-detect in background to update blocks (don't block UI)
+      // Re-detect in background to update block positions; keep user's edited text so Retry resends same changes
       detectText(newImage)
         .then(blocks => {
           setTextBlocks(blocks);
-          const initialEdits: Record<number, string> = {};
-          blocks.forEach((block, index) => {
-            initialEdits[index] = block.text;
+          setEditedBlocks(prev => {
+            const next: Record<number, string> = {};
+            blocks.forEach((block, index) => {
+              next[index] = prev[index] ?? block.text;
+            });
+            return next;
           });
-          setEditedBlocks(initialEdits);
         })
         .catch(() => {});
 
@@ -609,31 +611,44 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
             </div>
           )}
           {image ? (
-            <div className="relative">
-                <img 
-                  ref={imageRef} 
-                  src={image} 
-                  alt="Edited creative" 
-                  className="max-h-[80vh] max-w-full object-contain cursor-pointer hover:opacity-95 transition-opacity" 
-                  onClick={() => setIsViewerOpen(true)}
-                />
-                <ImageViewer 
-                  isOpen={isViewerOpen} 
-                  onClose={() => setIsViewerOpen(false)} 
-                  imageSrc={image} 
-                  altText="Generated Text Edit" 
-                  overlay={disclaimerOverlay}
-                  editorDims={containerDims}
-                />
-                {disclaimerOverlay && (
-                  <DraggableText
-                    {...disclaimerOverlay}
-                    containerWidth={containerDims.width}
-                    containerHeight={containerDims.height}
-                    isSelected={selectedTextId === disclaimerOverlay.id}
-                    onSelect={() => setSelectedTextId(disclaimerOverlay.id)}
-                    onUpdate={(data) => setDisclaimerOverlay({ ...disclaimerOverlay, ...data })}
+            <div className="relative flex flex-col items-center gap-3">
+                <div className="relative">
+                  <img 
+                    ref={imageRef} 
+                    src={image} 
+                    alt="Edited creative" 
+                    className="max-h-[80vh] max-w-full object-contain cursor-pointer hover:opacity-95 transition-opacity" 
+                    onClick={() => setIsViewerOpen(true)}
                   />
+                  <ImageViewer 
+                    isOpen={isViewerOpen} 
+                    onClose={() => setIsViewerOpen(false)} 
+                    imageSrc={image} 
+                    altText="Generated Text Edit" 
+                    overlay={disclaimerOverlay}
+                    editorDims={containerDims}
+                  />
+                  {disclaimerOverlay && (
+                    <DraggableText
+                      {...disclaimerOverlay}
+                      containerWidth={containerDims.width}
+                      containerHeight={containerDims.height}
+                      isSelected={selectedTextId === disclaimerOverlay.id}
+                      onSelect={() => setSelectedTextId(disclaimerOverlay.id)}
+                      onUpdate={(data) => setDisclaimerOverlay({ ...disclaimerOverlay, ...data })}
+                    />
+                  )}
+                </div>
+                {textBlocks.length > 0 && (
+                  <Button
+                    onClick={handleReplaceText}
+                    disabled={status === EditorState.LOADING}
+                    variant="outline"
+                    className="text-sm py-2 px-4 border-slate-600 text-slate-300 hover:bg-slate-700/50"
+                    icon={<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>}
+                  >
+                    {status === EditorState.LOADING ? 'Generating...' : 'Retry'}
+                  </Button>
                 )}
             </div>
           ) : (

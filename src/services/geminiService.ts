@@ -747,7 +747,7 @@ DO NOT ADD ANYTHING:
 APPLY EVERY REPLACEMENT:
 - Process replacement 1, then 2, ... through ${n}. Find each OLD text (or closest match) and replace it with the exact NEW text. No residue or ghost text.
 
-TEXT QUALITY: Match original font, size, color, and position for each replacement so it looks native to the ad.
+TEXT QUALITY: Match original font, size, color, and position for each replacement so it looks native to the ad. Numbers and digits (prices, dates, figures) must be rendered clearly and not deformed—keep numerals crisp, legible, and properly shaped.
 
 DISCLAIMER-FREE OUTPUT (mandatory every time):
 - You MUST remove all disclaimer, legal, fine-print, terms, and footnote text from the image. Erase it and fill with background so the generated image never contains any legal/disclaimer text. This applies to every generation.
