@@ -430,19 +430,20 @@ export const replaceBackground = async (
     const prompt = `
       Edit this image to replace the background with a new scene. The result must look like one single, natural photograph—not a cut-out or paste.
 
-      MANDATORY: Always remove all disclaimer text, legal text, fine print, footnotes, and terms-and-conditions text from the bottom or edges of the image. The output must have no such text visible. Fill those areas seamlessly with the new background or appropriate surface.
-
       TARGET BACKGROUND:
       ${backgroundPrompt}
 
       SUBJECT (CAR/VEHICLE):
-      - Keep the car in the same position, orientation, scale, and perspective. Preserve license plate, logos, and text exactly. Also keep the car's details exactly as is.
+      - Keep the car in the same position, orientation, scale, and perspective. Preserve license plate, logos, and the car's details exactly as is.
       - Do not add any outline, halo, glow, or colored edge around the car. No magenta, pink, or visible seam. The boundary between the car and the new background must be seamless and photorealistic.
-      - Adjust the lighting and shading on the car to match the new background (e.g. if the new scene is sunset, the car should have warm light and matching shadows) so it looks naturally part of the scene, not pasted on.
-      - Add realistic contact shadows or reflections on the ground where the car meets the new environment.
+      - Adjust the lighting and shading on the car to match the new background. Add realistic contact shadows or reflections where the car meets the ground.
+
+      TEXT IN THE IMAGE:
+      - KEEP all main ad copy: headlines, slogans, brand name, model name, price, offer text (e.g. "79€ al mese"), and any other visible marketing text. Do not remove or change these.
+      - REMOVE ONLY the small disclaimer/legal/fine-print text: the tiny text at the very bottom or edges (terms and conditions, asterisk footnotes, "Offer valid until...", etc.). Erase only those small lines and fill that area seamlessly with the new background. All other text must remain.
 
       OUTPUT:
-      One coherent image with the new background and the car naturally integrated. No disclaimer or legal text may remain.
+      One coherent image: new background, car naturally integrated, all main text kept, only the small legal/disclaimer text at the bottom or edges removed.
     `;
 
     const response = await ai.models.generateContent({
