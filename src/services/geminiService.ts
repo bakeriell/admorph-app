@@ -612,7 +612,11 @@ export const detectText = async (image: string): Promise<TextBlock[]> => {
         model,
         contents: {
             parts: [
-                { text: 'Analyze the image and detect ALL visible text elements including headlines, subheadlines, prices, slogans, and body copy. For each element, provide its exact text content and its bounding box as [x_min, y_min, x_max, y_max]. Return as a JSON array of objects with "text" and "box" keys.' },
+                { text: `Analyze the image and detect ALL visible text elements including headlines, subheadlines, prices, slogans, and body copy.
+
+CRITICAL - DUPLICATE TEXT: When the same text (e.g. a price like "79€" or a number) appears in MORE THAN ONE place (e.g. in a headline and again in body/fine print), return a SEPARATE element for EACH occurrence, each with its own bounding box [x_min, y_min, x_max, y_max]. Do not merge duplicate strings into one element.
+
+For each element provide: exact text content and box as [x_min, y_min, x_max, y_max]. Return a JSON array of objects with "text" and "box" keys.` },
                 imagePart
             ]
         },
@@ -772,7 +776,13 @@ export const replaceText = async (
             : '';
 
     const prompt = `
-Apply the following text replacements to the image. For each item, find the old text and replace it with the new text. Match the original font, size, and style. Remove any disclaimer or legal fine print from the image (user will add it back manually).
+Apply the following text replacements to the image.
+
+RULES:
+- For each replacement, find the old text and replace it with the new text. Match the original font, size, and style exactly.
+- If the SAME oldText appears in multiple places (e.g. "79€" in a headline and again in body text), replace EVERY occurrence with newText. Do not skip any occurrence.
+- Apply ALL replacements listed; do not skip any.
+- Remove any disclaimer or legal fine print from the image (user will add it back manually).
 ${userInstructions}
 REPLACEMENTS:
 ${changes.map((c, i) => `${i + 1}. "${escapeForPrompt(c.oldText ?? '')}" → "${escapeForPrompt(c.newText ?? '')}"`).join('\n')}

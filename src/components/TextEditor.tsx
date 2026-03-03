@@ -36,6 +36,7 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
   const [retryPrompt, setRetryPrompt] = useState('');
   const [isViewerOpen, setIsViewerOpen] = useState(false);
   const [containerDims, setContainerDims] = useState({ width: 0, height: 0 });
+  const [reDetectFailed, setReDetectFailed] = useState(false);
 
   const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -142,19 +143,31 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
       // Always use current image as source (original or last generated). If a previous apply missed some changes, the next apply uses this updated image so edits accumulate correctly.
       const newImage = await replaceText(image, changes, retryPrompt.trim() || undefined);
       setImage(newImage);
-      setStatus(EditorState.READY);
-      setLoadingMessage('');
+      setReDetectFailed(false);
 
-      detectText(newImage)
-        .then(blocks => {
+      // Re-detect text on the new image so Apply/Retry keeps working (with retries so 3rd+ apply doesn't break)
+      const reDetectWithRetry = async (src: string, attempt = 0): Promise<void> => {
+        const maxAttempts = 3;
+        try {
+          const blocks = await detectText(src);
           setTextBlocks(blocks);
           const initialEdits: Record<number, string> = {};
           blocks.forEach((block, index) => {
             initialEdits[index] = block.text;
           });
           setEditedBlocks(initialEdits);
-        })
-        .catch(() => {});
+        } catch (e) {
+          if (attempt < maxAttempts - 1) {
+            await new Promise((r) => setTimeout(r, 800));
+            return reDetectWithRetry(src, attempt + 1);
+          }
+          setReDetectFailed(true);
+        } finally {
+          setStatus(EditorState.READY);
+          setLoadingMessage('');
+        }
+      };
+      reDetectWithRetry(newImage);
 
       if (disclaimerText && containerDims.width > 0) {
         setDisclaimerOverlay({
@@ -178,6 +191,11 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
       setStatus(EditorState.READY);
       setLoadingMessage('');
     }
+  };
+
+  const handleDetectTextClick = () => {
+    setReDetectFailed(false);
+    handleDetectText();
   };
 
   const renderTextOnCanvas = (ctx: CanvasRenderingContext2D, data: TextOverlayData, scale: number) => {
@@ -445,7 +463,7 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
               <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">AI Magic Tools</label>
               <div className="grid grid-cols-2 gap-2">
                 <Button 
-                  onClick={handleDetectText} 
+                  onClick={handleDetectTextClick} 
                   disabled={status === EditorState.LOADING || (!image && !originalImage)} 
                   variant="secondary"
                   className="text-xs py-2 h-10"
@@ -471,6 +489,9 @@ export const TextEditor: React.FC<TextEditorProps> = ({ originalImage, onReset, 
                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Detected Content</label>
                 <span className="text-[10px] text-slate-600">{textBlocks.length} blocks found</span>
               </div>
+              {reDetectFailed && (
+                <p className="text-amber-400 text-[10px] mb-1">Text blocks could not refresh. Click &quot;Detect Text&quot; to update.</p>
+              )}
               
               <div className="max-h-[240px] overflow-y-auto pr-2 space-y-2 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
                 {status === EditorState.LOADING && textBlocks.length === 0 ? (
